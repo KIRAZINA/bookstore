@@ -9,5 +9,5 @@ import java.util.Optional;
 // @Repository не обязателен для Spring Data репозиториев — Spring создаст bean автоматически
 @Repository
 public interface UserRepository extends JpaRepository<AppUser, Long> {
-    Optional<AppUser> findByUsername(String username);  // <-- Optional, чтобы избежать NonUniqueException
+    Optional<AppUser> findByUsername(String username);
 }

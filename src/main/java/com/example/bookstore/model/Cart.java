@@ -19,7 +19,7 @@ public class Cart {
 
     @OneToOne
     @JoinColumn(name = "user_id")
-    @ToString.Exclude  // Исключаем user
+    @ToString.Exclude
     private AppUser user;
 
     @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)

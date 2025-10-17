@@ -54,7 +54,7 @@ public class SecurityConfig {
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class)
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)))
-                .headers(headers -> headers.frameOptions(frame -> frame.disable()));  // Ключ для H2 iframe
+                .headers(headers -> headers.frameOptions(frame -> frame.disable()));
         return http.build();
     }
 

@@ -15,7 +15,6 @@ public class RegisterRequest {
     @Email(message = "Invalid email")
     private String email;
 
-    // Геттеры и сеттеры
     public String getUsername() { return username; }
     public void setUsername(String username) { this.username = username; }
     public String getPassword() { return password; }

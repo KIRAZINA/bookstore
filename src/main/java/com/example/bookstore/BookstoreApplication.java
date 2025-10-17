@@ -9,7 +9,7 @@ import static org.springframework.data.web.config.EnableSpringDataWebSupport.Pag
 
 @SpringBootApplication
 @EnableAsync
-@EnableSpringDataWebSupport(pageSerializationMode = VIA_DTO)  // Стабильный JSON для Page
+@EnableSpringDataWebSupport(pageSerializationMode = VIA_DTO)
 public class BookstoreApplication {
 	public static void main(String[] args) {
 		SpringApplication.run(BookstoreApplication.class, args);

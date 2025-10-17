@@ -10,5 +10,5 @@ public interface BookRepository extends JpaRepository<Book, Long> {
     Page<Book> findByCategory(String category, Pageable pageable);
 
     @Query("SELECT b FROM Book b WHERE b.title LIKE %:search% OR b.author LIKE %:search%")
-    Page<Book> findByTitleOrAuthor(String search, Pageable pageable);  // Работает с пагинацией
+    Page<Book> findByTitleOrAuthor(String search, Pageable pageable);
 }

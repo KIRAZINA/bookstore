@@ -16,7 +16,7 @@ import java.util.function.Function;
 
 @Service
 public class JwtService {
-    private static final String SECRET_KEY = "your_256_bit_secret_key_here_change_it_to_a_real_secret"; // Замени на сильный ключ
+    private static final String SECRET_KEY = "your_256_bit_secret_key_here_change_it_to_a_real_secret";
 
     // Извлечение username из токена
     public String extractUsername(String token) {

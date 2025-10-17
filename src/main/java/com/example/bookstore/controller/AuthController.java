@@ -34,7 +34,7 @@ public class AuthController {
         log.info("Register attempt for username: {}", request.getUsername());
         AppUser user = new AppUser();
         user.setUsername(request.getUsername());
-        user.setPassword(request.getPassword()); // Сервис захэширует
+        user.setPassword(request.getPassword());
         user.setEmail(request.getEmail());
         AppUser saved = userService.registerUser(user);
         return ResponseEntity.ok(saved);

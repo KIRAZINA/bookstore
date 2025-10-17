@@ -28,24 +28,22 @@ public class UserService implements UserDetailsService {
     }
 
     public AppUser registerUser(AppUser user) {
-        // Проверка на существование перед сохранением
         if (userRepository.findByUsername(user.getUsername()).isPresent()) {
             throw new RuntimeException("User already exists");
         }
-        user.setPassword(passwordEncoder.encode(user.getPassword())); // Хэшируем здесь
-        user.setRole(UserRole.ROLE_USER);  // Enum вместо String
+        user.setPassword(passwordEncoder.encode(user.getPassword()));
+        user.setRole(UserRole.ROLE_USER);
         return userRepository.save(user);
     }
 
     public Optional<AppUser> findByUsername(String username) {
-        log.info("UserService: Querying DB for username = {}", username);  // Logger вместо System.out
+        log.info("UserService: Querying DB for username = {}", username);
         return userRepository.findByUsername(username);
     }
 
     @Override
     public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
         AppUser user = findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("User not found"));
-        // Извлечение роли без "ROLE_" через switch (enum-safe)
         String roleWithoutPrefix;
         switch (user.getRole()) {
             case ROLE_USER -> roleWithoutPrefix = "USER";

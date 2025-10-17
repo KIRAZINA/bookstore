@@ -54,8 +54,7 @@ public class CartService {
             CartItem item = new CartItem();
             item.setBook(book);
             item.setQuantity(quantity);
-            // Убрано item.setCart(cart); — unidirectional
-            cart.getItems().add(item);  // Добавление в коллекцию — Hibernate свяжет по joinColumn
+            cart.getItems().add(item);
         }
         return cartRepository.save(cart);
     }

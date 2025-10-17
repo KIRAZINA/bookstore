@@ -47,21 +47,19 @@ public class OrderService {
 
         Order order = new Order();
         order.setUser(user);
-        order.setCreatedAt(LocalDateTime.now());  // @PrePersist дублирует, но ок
+        order.setCreatedAt(LocalDateTime.now());
 
-        // Создаём items и добавляем в коллекцию order
         order.setItems(cart.getItems().stream()
                 .map(item -> {
                     OrderItem orderItem = new OrderItem();
                     orderItem.setBook(item.getBook());
                     orderItem.setQuantity(item.getQuantity());
                     orderItem.setPrice(item.getBook().getPrice());
-                    // Убрано orderItem.setOrder(order);
                     return orderItem;
                 })
                 .collect(Collectors.toList()));
 
-        order.getItems().forEach(order::addItem);  // Если добавишь метод addItem в Order модель; иначе: уже в setItems
+        order.getItems().forEach(order::addItem);
 
         order.setTotalPrice(order.getItems().stream()
                 .mapToDouble(item -> item.getQuantity() * item.getPrice())
@@ -75,8 +73,6 @@ public class OrderService {
 
         orderRepository.save(order);
         cartService.clearCart();
-
-        // Отправка email-уведомления
         emailService.sendOrderConfirmation(user.getEmail(), order);
 
         return order;

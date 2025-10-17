@@ -38,10 +38,9 @@ public class AppUser implements UserDetails {
 
     @Column(name = "role", nullable = false)
     @Enumerated(EnumType.STRING)
-    @Convert(converter = UserRoleConverter.class)  // Добавь
+    @Convert(converter = UserRoleConverter.class)
     private UserRole role = UserRole.ROLE_USER;
 
-    // UserDetails методы
     @Override
     public Collection<? extends GrantedAuthority> getAuthorities() {
         return List.of(new SimpleGrantedAuthority(role.name()));

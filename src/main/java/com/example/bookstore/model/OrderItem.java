@@ -19,8 +19,6 @@ public class OrderItem {
     @JoinColumn(name = "book_id", nullable = false)
     private Book book;
 
-    // Убрал order — unidirectional
-
     @Column(nullable = false)
     @Positive(message = "Quantity must be positive")
     private int quantity;
