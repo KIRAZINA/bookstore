@@ -7,7 +7,7 @@ import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
-
+import java.nio.charset.StandardCharsets;
 import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.HashMap;
@@ -18,29 +18,25 @@ import java.util.function.Function;
 public class JwtService {
     private static final String SECRET_KEY = "your_256_bit_secret_key_here_change_it_to_a_real_secret";
 
-    // Извлечение username из токена
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
     }
 
-    // Извлечение любого claim
     public <T> T extractClaim(String token, Function<Claims, T> claimsResolver) {
         final Claims claims = extractAllClaims(token);
         return claimsResolver.apply(claims);
     }
 
-    // Генерация токена для UserDetails
+
     public String generateToken(UserDetails userDetails) {
         return generateToken(new HashMap<>(), userDetails);
     }
 
-    // Генерация токена для username (простой вариант, без ролей в claims)
     public String generateToken(String username) {
         Map<String, Object> claims = new HashMap<>();
         return generateToken(claims, username);
     }
 
-    // Основной метод генерации
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
         return Jwts
                 .builder()
@@ -52,7 +48,6 @@ public class JwtService {
                 .compact();
     }
 
-    // Перегруженный для String username
     private String generateToken(Map<String, Object> extraClaims, String username) {
         return Jwts
                 .builder()
@@ -64,7 +59,6 @@ public class JwtService {
                 .compact();
     }
 
-    // Валидация токена
     public boolean isTokenValid(String token, UserDetails userDetails) {
         final String username = extractUsername(token);
         return (username.equals(userDetails.getUsername())) && !isTokenExpired(token);
@@ -78,7 +72,6 @@ public class JwtService {
         return extractClaim(token, Claims::getExpiration);
     }
 
-    // Извлечение всех claims
     private Claims extractAllClaims(String token) {
         JwtParser parser = Jwts.parser()
                 .verifyWith(getSignInKey())
@@ -86,8 +79,7 @@ public class JwtService {
         return parser.parseSignedClaims(token).getPayload();
     }
 
-    // Ключ для подписи
     private SecretKey getSignInKey() {
-        return Keys.hmacShaKeyFor(SECRET_KEY.getBytes());
+        return Keys.hmacShaKeyFor(SECRET_KEY.getBytes(StandardCharsets.UTF_8));
     }
 }
