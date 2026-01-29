@@ -24,7 +24,7 @@ public class CartService {
 
     public Cart getCart() {
         AppUser user = (AppUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
-        return cartRepository.findByUser(user)
+        return cartRepository.findByUserId(user.getId())
                 .orElseGet(() -> {
                     Cart cart = new Cart();
                     cart.setUser(user);

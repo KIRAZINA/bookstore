@@ -1,4 +1,3 @@
-// В UserRoleConverter.java
 package com.example.bookstore.model;
 
 import jakarta.persistence.AttributeConverter;

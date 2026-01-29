@@ -19,6 +19,8 @@ public class OrderItem {
     @JoinColumn(name = "book_id", nullable = false)
     private Book book;
 
+    // Using standard getters/setters from Lombok @Getter @Setter
+
     @Column(nullable = false)
     @Positive(message = "Quantity must be positive")
     private int quantity;
@@ -26,26 +28,4 @@ public class OrderItem {
     @Column(nullable = false)
     @Positive(message = "Price must be positive")
     private double price;
-
-    public Book getBook() {
-        if (book == null) return null;
-        Book copy = new Book();
-        copy.setId(book.getId());
-        copy.setTitle(book.getTitle());
-        copy.setAuthor(book.getAuthor());
-        copy.setPrice(book.getPrice());
-        return copy;
-    }
-
-    public void setBook(Book book) {
-        if (book == null) {
-            this.book = null;
-            return;
-        }
-        this.book = new Book();
-        this.book.setId(book.getId());
-        this.book.setTitle(book.getTitle());
-        this.book.setAuthor(book.getAuthor());
-        this.book.setPrice(book.getPrice());
-    }
 }

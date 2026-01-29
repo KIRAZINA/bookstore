@@ -16,7 +16,16 @@ import java.util.function.Function;
 
 @Service
 public class JwtService {
-    private static final String SECRET_KEY = "your_256_bit_secret_key_here_change_it_to_a_real_secret";
+    private static final String SECRET_KEY = System.getenv("JWT_SECRET");
+
+    public JwtService() {
+        if (SECRET_KEY == null || SECRET_KEY.isEmpty()) {
+            throw new IllegalStateException("JWT_SECRET environment variable is not set");
+        }
+        if (SECRET_KEY.length() < 32) {
+            throw new IllegalStateException("JWT_SECRET must be at least 32 characters long");
+        }
+    }
 
     public String extractUsername(String token) {
         return extractClaim(token, Claims::getSubject);
@@ -29,32 +38,25 @@ public class JwtService {
 
 
     public String generateToken(UserDetails userDetails) {
-        return generateToken(new HashMap<>(), userDetails);
+        return generateToken(new HashMap<>(), userDetails.getUsername());
     }
 
     public String generateToken(String username) {
-        Map<String, Object> claims = new HashMap<>();
-        return generateToken(claims, username);
+        return generateToken(new HashMap<>(), username);
     }
 
     public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
-        return Jwts
-                .builder()
-                .claims(extraClaims)
-                .subject(userDetails.getUsername())
-                .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24)) // 24 часа
-                .signWith(getSignInKey(), SignatureAlgorithm.HS256)
-                .compact();
+        return generateToken(extraClaims, userDetails.getUsername());
     }
 
     private String generateToken(Map<String, Object> extraClaims, String username) {
+        long now = System.currentTimeMillis();
         return Jwts
                 .builder()
                 .claims(extraClaims)
                 .subject(username)
-                .issuedAt(new Date(System.currentTimeMillis()))
-                .expiration(new Date(System.currentTimeMillis() + 1000 * 60 * 60 * 24))
+                .issuedAt(new Date(now))
+                .expiration(new Date(now + 1000L * 60 * 60 * 24)) // 24 hours
                 .signWith(getSignInKey(), SignatureAlgorithm.HS256)
                 .compact();
     }

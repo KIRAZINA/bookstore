@@ -29,7 +29,7 @@ public class UserService implements UserDetailsService {
 
     public AppUser registerUser(AppUser user) {
         if (userRepository.findByUsername(user.getUsername()).isPresent()) {
-            throw new RuntimeException("User already exists");
+            throw new IllegalArgumentException("User with this username already exists");
         }
         user.setPassword(passwordEncoder.encode(user.getPassword()));
         user.setRole(UserRole.ROLE_USER);

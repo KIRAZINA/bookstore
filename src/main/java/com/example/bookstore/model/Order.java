@@ -57,25 +57,7 @@ public class Order {
         this.items = new ArrayList<>(items);
     }
 
-    public AppUser getUser() {
-        if (user == null) return null;
-        AppUser copy = new AppUser();
-        copy.setId(user.getId());
-        copy.setUsername(user.getUsername());
-        copy.setEmail(user.getEmail());
-
-        return copy;
-    }
-
-    public void setUser(AppUser user) {
-        if (user == null) {
-            this.user = null;
-            return;
-        }
-        this.user = new AppUser();
-        this.user.setId(user.getId());
-        this.user.setUsername(user.getUsername());
-        this.user.setEmail(user.getEmail());
-    }
+    // Custom getUser and setUser methods removed - using standard Lombok getters/setters
+    // Fields id and user already have generated getter/setter from @Getter @Setter
 
 }

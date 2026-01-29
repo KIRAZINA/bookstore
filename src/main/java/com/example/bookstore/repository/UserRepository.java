@@ -6,7 +6,7 @@ import org.springframework.stereotype.Repository;
 
 import java.util.Optional;
 
-// @Repository не обязателен для Spring Data репозиториев — Spring создаст bean автоматически
+// @Repository is optional for Spring Data repositories - Spring will create the bean automatically
 @Repository
 public interface UserRepository extends JpaRepository<AppUser, Long> {
     Optional<AppUser> findByUsername(String username);

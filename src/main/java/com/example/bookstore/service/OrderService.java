@@ -82,6 +82,6 @@ public class OrderService {
         AppUser user = (AppUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
         Sort sort = Sort.by(direction.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC, sortBy);
         Pageable pageable = PageRequest.of(page, size, sort);
-        return orderRepository.findByUser(user, pageable);
+        return orderRepository.findByUserId(user.getId(), pageable);
     }
 }

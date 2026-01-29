@@ -2,6 +2,7 @@ package com.example.bookstore.controller;
 
 import com.example.bookstore.controller.dto.LoginRequest;
 import com.example.bookstore.controller.dto.RegisterRequest;
+import com.example.bookstore.controller.dto.RegisterResponse;
 import com.example.bookstore.model.AppUser;
 import com.example.bookstore.service.JwtService;
 import com.example.bookstore.service.UserService;
@@ -30,14 +31,21 @@ public class AuthController {
     }
 
     @PostMapping("/register")
-    public ResponseEntity<?> register(@Valid @RequestBody RegisterRequest request) {
+    public ResponseEntity<RegisterResponse> register(@Valid @RequestBody RegisterRequest request) {
         log.info("Register attempt for username: {}", request.getUsername());
         AppUser user = new AppUser();
         user.setUsername(request.getUsername());
         user.setPassword(request.getPassword());
         user.setEmail(request.getEmail());
         AppUser saved = userService.registerUser(user);
-        return ResponseEntity.ok(saved);
+        
+        RegisterResponse response = new RegisterResponse(
+            saved.getId(),
+            saved.getUsername(),
+            saved.getEmail(),
+            saved.getRole()
+        );
+        return ResponseEntity.ok(response);
     }
 
     @PostMapping("/login")
