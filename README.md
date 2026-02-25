@@ -1,6 +1,6 @@
 # Bookstore API
 
-[![Build Status](https://github.com/KIRAZINA/bookstore/actions/workflows/maven.yml/badge.svg)](https://github.com/KIRAZINA/bookstore/actions/workflows/maven.yml) [![Java 17](https://img.shields.io/badge/Java-17-blue)](https://openjdk.java.net/projects/jdk/17/) [![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.x-green)](https://spring.io/projects/spring-boot)
+[![Build Status](https://github.com/KIRAZINA/bookstore/actions/workflows/maven.yml/badge.svg)](https://github.com/KIRAZINA/bookstore/actions/workflows/maven.yml) [![Java 17](https://img.shields.io/badge/Java-17-blue)](https://openjdk.java.net/projects/jdk/17/) [![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5-green)](https://spring.io/projects/spring-boot)
 
 Spring Boot application for an online bookstore API with JWT authentication.
 
@@ -11,8 +11,7 @@ Spring Boot application for an online bookstore API with JWT authentication.
 - **Orders**: Create orders from cart, view order history
 - **Database**: H2 in-memory (for dev), PostgreSQL ready (production)
 - **Security**: Spring Security + JJWT, USER/ADMIN roles
-- **API Documentation**: Swagger/OpenAPI UI
-- **Testing**: 32 unit tests (models, services)
+- **Testing**: 88 tests (integration + unit)
 
 ## Setup
 - JDK 17+
@@ -21,12 +20,11 @@ Spring Boot application for an online bookstore API with JWT authentication.
 
 ## Technologies
 - Java 17
-- Spring Boot 3.x
+- Spring Boot 3.5
 - Spring Security + JJWT 0.12.x
 - Hibernate/JPA
 - Maven
 - H2 Database
-- SpringDoc OpenAPI
 - Lombok
 
 ## Steps
@@ -44,8 +42,7 @@ Spring Boot application for an online bookstore API with JWT authentication.
    mvnw spring-boot:run
    ```
 4. Server at http://localhost:8080
-5. Swagger UI: http://localhost:8080/swagger-ui.html
-6. H2 Console: http://localhost:8080/h2-console (jdbc:h2:mem:testdb)
+5. H2 Console: http://localhost:8080/h2-console (jdbc:h2:mem:testdb)
 
 ## API Endpoints
 
@@ -90,13 +87,11 @@ Run tests:
 mvn test
 ```
 
-Test coverage (32 tests):
-- `UserServiceTest` - 7 tests (registration, login, user details)
-- `JwtServiceTest` - 6 tests (token generation, validation)
-- `BookTest` - 4 tests (model fields, equals/hashCode)
-- `AppUserTest` - 5 tests (authorities, account status)
-- `UserRoleTest` - 4 tests (enum values)
-- `UserRoleConverterTest` - 6 tests (JPA converter)
+Test coverage (88 tests):
+- Integration tests for all controllers (Auth, Book, Cart, Order)
+- JSON serialization tests
+- Model unit tests
+- Service layer unit tests with Mockito
 
 ## Project Structure
 ```
@@ -113,4 +108,4 @@ src/main/java/com/example/bookstore/
 - JWT_SECRET must be set via environment variable
 - Passwords are BCrypt encoded
 - Admin endpoints require ROLE_ADMIN
-- All endpoints except auth, books (GET), swagger require authentication
+- All endpoints except auth, books (GET) require authentication

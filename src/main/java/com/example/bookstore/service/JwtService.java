@@ -16,18 +16,14 @@ import java.util.function.Function;
 
 @Service
 public class JwtService {
-    private static final String SECRET_KEY = System.getenv("JWT_SECRET");
-    private static final String DEFAULT_SECRET = "test_secret_key_that_is_long_enough_32_chars";
+    // Simple secret - in production, use environment variable
     private final String secretKey;
 
     public JwtService() {
-        if (SECRET_KEY == null || SECRET_KEY.isEmpty()) {
-            this.secretKey = DEFAULT_SECRET;
-        } else if (SECRET_KEY.length() < 32) {
-            throw new IllegalStateException("JWT_SECRET must be at least 32 characters long");
-        } else {
-            this.secretKey = SECRET_KEY;
-        }
+        String envSecret = System.getenv("JWT_SECRET");
+        this.secretKey = (envSecret != null && !envSecret.isEmpty()) 
+            ? envSecret 
+            : "dev_secret_key_that_is_at_least_32_characters";
     }
 
     public String extractUsername(String token) {
@@ -39,17 +35,12 @@ public class JwtService {
         return claimsResolver.apply(claims);
     }
 
-
     public String generateToken(UserDetails userDetails) {
         return generateToken(new HashMap<>(), userDetails.getUsername());
     }
 
     public String generateToken(String username) {
         return generateToken(new HashMap<>(), username);
-    }
-
-    public String generateToken(Map<String, Object> extraClaims, UserDetails userDetails) {
-        return generateToken(extraClaims, userDetails.getUsername());
     }
 
     private String generateToken(Map<String, Object> extraClaims, String username) {

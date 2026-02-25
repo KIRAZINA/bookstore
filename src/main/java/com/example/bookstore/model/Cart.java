@@ -27,7 +27,7 @@ public class Cart {
     private List<CartItem> items = new ArrayList<>();
 
     public List<CartItem> getItems() {
-        return Collections.unmodifiableList(items);
+        return new ArrayList<>(items);
     }
 
     public void setItems(List<CartItem> items) {

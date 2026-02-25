@@ -6,7 +6,10 @@ import com.example.bookstore.model.Cart;
 import com.example.bookstore.model.CartItem;
 import com.example.bookstore.repository.BookRepository;
 import com.example.bookstore.repository.CartRepository;
+import com.example.bookstore.repository.UserRepository;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,14 +19,37 @@ import java.util.Optional;
 public class CartService {
     private final CartRepository cartRepository;
     private final BookRepository bookRepository;
+    private final UserRepository userRepository;
 
-    public CartService(CartRepository cartRepository, BookRepository bookRepository) {
+    public CartService(CartRepository cartRepository, BookRepository bookRepository, UserRepository userRepository) {
         this.cartRepository = cartRepository;
         this.bookRepository = bookRepository;
+        this.userRepository = userRepository;
+    }
+
+    private AppUser getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new IllegalStateException("User not authenticated");
+        }
+        
+        Object principal = authentication.getPrincipal();
+        String username;
+        
+        if (principal instanceof UserDetails) {
+            username = ((UserDetails) principal).getUsername();
+        } else if (principal instanceof String) {
+            username = (String) principal;
+        } else {
+            throw new IllegalStateException("Unknown principal type: " + principal.getClass());
+        }
+        
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalStateException("User not found: " + username));
     }
 
     public Cart getCart() {
-        AppUser user = (AppUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        AppUser user = getCurrentUser();
         return cartRepository.findByUserId(user.getId())
                 .orElseGet(() -> {
                     Cart cart = new Cart();

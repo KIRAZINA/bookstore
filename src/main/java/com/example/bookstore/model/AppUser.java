@@ -39,9 +39,9 @@ public class AppUser implements UserDetails, Serializable {
     @Email(message = "Invalid email")
     private String email;
 
+    // Using @Enumerated(EnumType.STRING) - JPA handles conversion automatically
     @Column(name = "role", nullable = false)
     @Enumerated(EnumType.STRING)
-    @Convert(converter = UserRoleConverter.class)
     private UserRole role = UserRole.ROLE_USER;
 
     @Override

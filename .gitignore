@@ -1,29 +1,46 @@
 # Maven build
-  target/
-  *.jar
-  *.war
-  *.ear
+target/
+*.jar
+*.war
+*.ear
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
 
-  # IntelliJ IDEA
-  .idea/
-  *.iws
-  *.iml
-  *.ipr
-  out/
+# Maven wrapper
+.mvn/
 
-  # VS Code
-  .vscode/
+# IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
 
-  # H2 DB files
-  *.mv.db
-  *.trace.db
+# VS Code
+.vscode/
 
-  # OS
-  .DS_Store
-  Thumbs.db
+# Eclipse
+.settings/
+.classpath
+.project
 
-  # Logs
-  *.log
+# H2 DB files
+*.mv.db
+*.trace.db
 
-  # Compiled classes
-  *.class
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+logs/
+
+# Compiled classes
+*.class
+
+# Test output
+test-output/

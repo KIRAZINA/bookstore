@@ -8,11 +8,14 @@ import com.example.bookstore.model.Order;
 import com.example.bookstore.model.OrderItem;
 import com.example.bookstore.repository.BookRepository;
 import com.example.bookstore.repository.OrderRepository;
+import com.example.bookstore.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -25,18 +28,47 @@ public class OrderService {
     private final CartService cartService;
     private final BookRepository bookRepository;
     private final EmailService emailService;
+    private final UserRepository userRepository;
 
-    public OrderService(OrderRepository orderRepository, CartService cartService, BookRepository bookRepository, EmailService emailService) {
+    public OrderService(OrderRepository orderRepository, CartService cartService, 
+                       BookRepository bookRepository, EmailService emailService,
+                       UserRepository userRepository) {
         this.orderRepository = orderRepository;
         this.cartService = cartService;
         this.bookRepository = bookRepository;
         this.emailService = emailService;
+        this.userRepository = userRepository;
+    }
+
+    private AppUser getCurrentUser() {
+        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
+        if (authentication == null || !authentication.isAuthenticated()) {
+            throw new IllegalStateException("User not authenticated");
+        }
+        
+        Object principal = authentication.getPrincipal();
+        String username;
+        
+        if (principal instanceof UserDetails) {
+            username = ((UserDetails) principal).getUsername();
+        } else if (principal instanceof String) {
+            username = (String) principal;
+        } else {
+            throw new IllegalStateException("Unknown principal type: " + principal.getClass());
+        }
+        
+        return userRepository.findByUsername(username)
+                .orElseThrow(() -> new IllegalStateException("User not found: " + username));
     }
 
     @Transactional
     public Order createOrder() {
-        AppUser user = (AppUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        AppUser user = getCurrentUser();
         Cart cart = cartService.getCart();
+
+        if (cart.getItems().isEmpty()) {
+            throw new IllegalStateException("Cart is empty");
+        }
 
         for (CartItem item : cart.getItems()) {
             Book book = item.getBook();
@@ -73,13 +105,16 @@ public class OrderService {
 
         orderRepository.save(order);
         cartService.clearCart();
-        emailService.sendOrderConfirmation(user.getEmail(), order);
+        
+        if (user.getEmail() != null) {
+            emailService.sendOrderConfirmation(user.getEmail(), order);
+        }
 
         return order;
     }
 
     public Page<Order> getUserOrders(int page, int size, String sortBy, String direction) {
-        AppUser user = (AppUser) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
+        AppUser user = getCurrentUser();
         Sort sort = Sort.by(direction.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC, sortBy);
         Pageable pageable = PageRequest.of(page, size, sort);
         return orderRepository.findByUserId(user.getId(), pageable);
