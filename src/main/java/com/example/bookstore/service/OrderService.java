@@ -1,5 +1,6 @@
 package com.example.bookstore.service;
 
+import com.example.bookstore.config.SecurityUtils;
 import com.example.bookstore.model.AppUser;
 import com.example.bookstore.model.Book;
 import com.example.bookstore.model.Cart;
@@ -8,14 +9,10 @@ import com.example.bookstore.model.Order;
 import com.example.bookstore.model.OrderItem;
 import com.example.bookstore.repository.BookRepository;
 import com.example.bookstore.repository.OrderRepository;
-import com.example.bookstore.repository.UserRepository;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.domain.Sort;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,43 +24,19 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final CartService cartService;
     private final BookRepository bookRepository;
-    private final EmailService emailService;
-    private final UserRepository userRepository;
+    private final SecurityUtils securityUtils;
 
     public OrderService(OrderRepository orderRepository, CartService cartService, 
-                       BookRepository bookRepository, EmailService emailService,
-                       UserRepository userRepository) {
+                       BookRepository bookRepository, SecurityUtils securityUtils) {
         this.orderRepository = orderRepository;
         this.cartService = cartService;
         this.bookRepository = bookRepository;
-        this.emailService = emailService;
-        this.userRepository = userRepository;
-    }
-
-    private AppUser getCurrentUser() {
-        Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        if (authentication == null || !authentication.isAuthenticated()) {
-            throw new IllegalStateException("User not authenticated");
-        }
-        
-        Object principal = authentication.getPrincipal();
-        String username;
-        
-        if (principal instanceof UserDetails) {
-            username = ((UserDetails) principal).getUsername();
-        } else if (principal instanceof String) {
-            username = (String) principal;
-        } else {
-            throw new IllegalStateException("Unknown principal type: " + principal.getClass());
-        }
-        
-        return userRepository.findByUsername(username)
-                .orElseThrow(() -> new IllegalStateException("User not found: " + username));
+        this.securityUtils = securityUtils;
     }
 
     @Transactional
     public Order createOrder() {
-        AppUser user = getCurrentUser();
+        AppUser user = securityUtils.getCurrentUser();
         Cart cart = cartService.getCart();
 
         if (cart.getItems().isEmpty()) {
@@ -105,16 +78,12 @@ public class OrderService {
 
         orderRepository.save(order);
         cartService.clearCart();
-        
-        if (user.getEmail() != null) {
-            emailService.sendOrderConfirmation(user.getEmail(), order);
-        }
 
         return order;
     }
 
     public Page<Order> getUserOrders(int page, int size, String sortBy, String direction) {
-        AppUser user = getCurrentUser();
+        AppUser user = securityUtils.getCurrentUser();
         Sort sort = Sort.by(direction.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC, sortBy);
         Pageable pageable = PageRequest.of(page, size, sort);
         return orderRepository.findByUserId(user.getId(), pageable);

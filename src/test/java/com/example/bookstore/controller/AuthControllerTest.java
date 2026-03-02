@@ -5,7 +5,6 @@ import com.example.bookstore.controller.dto.RegisterRequest;
 import com.example.bookstore.model.AppUser;
 import com.example.bookstore.model.UserRole;
 import com.example.bookstore.repository.UserRepository;
-import com.example.bookstore.service.JwtService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -40,9 +39,6 @@ class AuthControllerTest {
 
     @Autowired
     private PasswordEncoder passwordEncoder;
-
-    @Autowired
-    private JwtService jwtService;
 
     @BeforeEach
     void setUp() {
@@ -172,116 +168,53 @@ class AuthControllerTest {
         @Test
         @DisplayName("Успішний логін")
         void login_Success() throws Exception {
-            LoginRequest request = new LoginRequest();
-            request.setUsername("logintest");
-            request.setPassword("password123");
-
             mockMvc.perform(post("/api/auth/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$").isString())
-                    .andExpect(jsonPath("$").isNotEmpty());
+                            .param("username", "logintest")
+                            .param("password", "password123"))
+                    .andExpect(status().isOk());
         }
 
         @Test
         @DisplayName("Логін - невірний пароль")
         void login_WrongPassword() throws Exception {
-            LoginRequest request = new LoginRequest();
-            request.setUsername("logintest");
-            request.setPassword("wrongpassword");
-
             mockMvc.perform(post("/api/auth/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isUnauthorized())
-                    .andExpect(content().string("Invalid credentials"));
+                            .param("username", "logintest")
+                            .param("password", "wrongpassword"))
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
         @DisplayName("Логін - користувач не існує")
         void login_UserNotFound() throws Exception {
-            LoginRequest request = new LoginRequest();
-            request.setUsername("nonexistent");
-            request.setPassword("password123");
-
             mockMvc.perform(post("/api/auth/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isUnauthorized())
-                    .andExpect(content().string("Invalid credentials"));
+                            .param("username", "nonexistent")
+                            .param("password", "password123"))
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
         @DisplayName("Логін - порожній username")
         void login_BlankUsername() throws Exception {
-            LoginRequest request = new LoginRequest();
-            request.setUsername("");
-            request.setPassword("password123");
-
             mockMvc.perform(post("/api/auth/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest());
+                            .param("username", "")
+                            .param("password", "password123"))
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
         @DisplayName("Логін - порожній пароль")
         void login_BlankPassword() throws Exception {
-            LoginRequest request = new LoginRequest();
-            request.setUsername("logintest");
-            request.setPassword("");
-
             mockMvc.perform(post("/api/auth/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isBadRequest());
+                            .param("username", "logintest")
+                            .param("password", ""))
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
-        @DisplayName("Логін - тіло запиту пусте")
-        void login_EmptyBody() throws Exception {
-            mockMvc.perform(post("/api/auth/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content("{}"))
-                    .andExpect(status().isBadRequest());
-        }
-    }
-
-    @Nested
-    @DisplayName("JWT Token Tests")
-    class JwtTokenTests {
-
-        @Test
-        @DisplayName("Валідний JWT токен містить username")
-        void jwtToken_ContainsUsername() throws Exception {
-            AppUser user = new AppUser();
-            user.setUsername("jwttest");
-            user.setPassword(passwordEncoder.encode("password123"));
-            user.setRole(UserRole.ROLE_USER);
-            userRepository.save(user);
-
-            LoginRequest request = new LoginRequest();
-            request.setUsername("jwttest");
-            request.setPassword("password123");
-
-            String token = mockMvc.perform(post("/api/auth/login")
-                            .contentType(MediaType.APPLICATION_JSON)
-                            .content(objectMapper.writeValueAsString(request)))
-                    .andExpect(status().isOk())
-                    .andReturn().getResponse().getContentAsString();
-
-            String extractedUsername = jwtService.extractUsername(token);
-            assertEquals("jwttest", extractedUsername);
-        }
-
-        @Test
-        @DisplayName("Токен прострочений або невалідний")
-        void jwtToken_Invalid() throws Exception {
-            mockMvc.perform(post("/api/auth/login")
-                            .header("Authorization", "Bearer invalidtoken")
-                            .contentType(MediaType.APPLICATION_JSON))
-                    .andExpect(status().isBadRequest());
+        @DisplayName("Логін - без параметрів")
+        void login_EmptyParams() throws Exception {
+            mockMvc.perform(post("/api/auth/login"))
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

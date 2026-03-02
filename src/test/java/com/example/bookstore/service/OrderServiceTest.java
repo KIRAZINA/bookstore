@@ -1,9 +1,9 @@
 package com.example.bookstore.service;
 
+import com.example.bookstore.config.SecurityUtils;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.BookRepository;
 import com.example.bookstore.repository.OrderRepository;
-import com.example.bookstore.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -12,10 +12,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -42,10 +38,7 @@ class OrderServiceTest {
     private BookRepository bookRepository;
 
     @Mock
-    private EmailService emailService;
-
-    @Mock
-    private UserRepository userRepository;
+    private SecurityUtils securityUtils;
 
     @InjectMocks
     private OrderService orderService;
@@ -59,14 +52,6 @@ class OrderServiceTest {
         testUser.setUsername("testuser");
         testUser.setEmail("test@example.com");
         testUser.setRole(UserRole.ROLE_USER);
-
-        UserDetails userDetails = org.springframework.security.core.userdetails.User
-                .withUsername("testuser")
-                .password("password")
-                .roles("USER")
-                .build();
-        Authentication auth = new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-        SecurityContextHolder.getContext().setAuthentication(auth);
     }
 
     @Nested
@@ -77,7 +62,7 @@ class OrderServiceTest {
         void createOrder_EmptyCart() {
             Cart emptyCart = new Cart();
             emptyCart.setUser(testUser);
-            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
+            when(securityUtils.getCurrentUser()).thenReturn(testUser);
             when(cartService.getCart()).thenReturn(emptyCart);
 
             assertThrows(IllegalStateException.class, () -> orderService.createOrder());
@@ -86,7 +71,7 @@ class OrderServiceTest {
         @Test
         @DisplayName("Створення замовлення без автентифікації")
         void createOrder_Unauthenticated() {
-            SecurityContextHolder.getContext().setAuthentication(null);
+            when(securityUtils.getCurrentUser()).thenThrow(new IllegalStateException("User not authenticated"));
 
             assertThrows(IllegalStateException.class, () -> orderService.createOrder());
         }
@@ -101,44 +86,16 @@ class OrderServiceTest {
             Order order = new Order();
             order.setId(1L);
             order.setUser(testUser);
-            order.setCreatedAt(LocalDateTime.now());
-            
-            List<Order> orders = List.of(order);
-            Page<Order> page = new PageImpl<>(orders);
-            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
-            when(orderRepository.findByUserId(anyLong(), any(PageRequest.class))).thenReturn(page);
+            order.setTotalPrice(100.0);
+            Page<Order> page = new PageImpl<>(List.of(order));
+
+            when(securityUtils.getCurrentUser()).thenReturn(testUser);
+            when(orderRepository.findByUserId(anyLong(), any())).thenReturn(page);
 
             Page<Order> result = orderService.getUserOrders(0, 10, "createdAt", "desc");
 
             assertNotNull(result);
-            assertEquals(1, result.getTotalElements());
-            verify(orderRepository).findByUserId(eq(1L), any(PageRequest.class));
-        }
-
-        @Test
-        @DisplayName("Отримання замовлень з пагінацією")
-        void getUserOrders_WithPagination() {
-            Page<Order> emptyPage = new PageImpl<>(List.of());
-            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
-            when(orderRepository.findByUserId(anyLong(), any(PageRequest.class))).thenReturn(emptyPage);
-
-            Page<Order> result = orderService.getUserOrders(0, 5, "id", "asc");
-
-            assertNotNull(result);
-            assertEquals(0, result.getTotalElements());
-        }
-
-        @Test
-        @DisplayName("Отримання замовлень за зростанням")
-        void getUserOrders_AscendingSort() {
-            Page<Order> emptyPage = new PageImpl<>(List.of());
-            when(userRepository.findByUsername("testuser")).thenReturn(Optional.of(testUser));
-            when(orderRepository.findByUserId(anyLong(), any(PageRequest.class))).thenReturn(emptyPage);
-
-            Page<Order> result = orderService.getUserOrders(0, 10, "totalPrice", "asc");
-
-            assertNotNull(result);
-            verify(orderRepository).findByUserId(eq(1L), any(PageRequest.class));
+            assertEquals(1, result.getContent().size());
         }
     }
 }

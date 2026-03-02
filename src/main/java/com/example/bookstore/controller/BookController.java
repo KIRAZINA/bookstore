@@ -2,10 +2,11 @@ package com.example.bookstore.controller;
 
 import com.example.bookstore.model.Book;
 import com.example.bookstore.service.BookService;
-import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/books")
@@ -17,32 +18,18 @@ public class BookController {
     }
 
     @GetMapping
-    public Page<Book> getAllBooks(
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "title") String sortBy,
-            @RequestParam(defaultValue = "asc") String direction) {
-        return bookService.getAllBooks(page, size, sortBy, direction);
+    public List<Book> getAllBooks() {
+        return bookService.getAllBooks();
     }
 
     @GetMapping("/category")
-    public Page<Book> getBooksByCategory(
-            @RequestParam String category,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "title") String sortBy,
-            @RequestParam(defaultValue = "asc") String direction) {
-        return bookService.getBooksByCategory(category, page, size, sortBy, direction);
+    public List<Book> getBooksByCategory(@RequestParam String category) {
+        return bookService.getBooksByCategory(category);
     }
 
     @GetMapping("/search")
-    public Page<Book> searchBooks(
-            @RequestParam String search,
-            @RequestParam(defaultValue = "0") int page,
-            @RequestParam(defaultValue = "10") int size,
-            @RequestParam(defaultValue = "title") String sortBy,
-            @RequestParam(defaultValue = "asc") String direction) {
-        return bookService.searchBooks(search, page, size, sortBy, direction);
+    public List<Book> searchBooks(@RequestParam String search) {
+        return bookService.searchBooks(search);
     }
 
     @PostMapping

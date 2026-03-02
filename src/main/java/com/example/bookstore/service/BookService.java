@@ -2,11 +2,9 @@ package com.example.bookstore.service;
 
 import com.example.bookstore.model.Book;
 import com.example.bookstore.repository.BookRepository;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
+
+import java.util.List;
 
 @Service
 public class BookService {
@@ -20,22 +18,16 @@ public class BookService {
         return bookRepository.save(book);
     }
 
-    public Page<Book> getAllBooks(int page, int size, String sortBy, String direction) {
-        Sort sort = Sort.by(direction.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC, sortBy);
-        Pageable pageable = PageRequest.of(page, size, sort);
-        return bookRepository.findAll(pageable);
+    public List<Book> getAllBooks() {
+        return bookRepository.findAll();
     }
 
-    public Page<Book> getBooksByCategory(String category, int page, int size, String sortBy, String direction) {
-        Sort sort = Sort.by(direction.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC, sortBy);
-        Pageable pageable = PageRequest.of(page, size, sort);
-        return bookRepository.findByCategory(category, pageable);
+    public List<Book> getBooksByCategory(String category) {
+        return bookRepository.findByCategory(category);
     }
 
-    public Page<Book> searchBooks(String search, int page, int size, String sortBy, String direction) {
-        Sort sort = Sort.by(direction.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC, sortBy);
-        Pageable pageable = PageRequest.of(page, size, sort);
-        return bookRepository.findByTitleOrAuthor(search, pageable);
+    public List<Book> searchBooks(String search) {
+        return bookRepository.findByTitleOrAuthor(search);
     }
 
     public void deleteBook(Long id) {

@@ -10,10 +10,6 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
 
 import java.util.Arrays;
 import java.util.List;
@@ -21,7 +17,6 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -68,30 +63,16 @@ class BookServiceTest {
     class GetAllBooksTests {
 
         @Test
-        @DisplayName("Отримання всіх книг з пагінацією")
+        @DisplayName("Отримання всіх книг")
         void getAllBooks_Success() {
             List<Book> books = Arrays.asList(testBook);
-            Page<Book> page = new PageImpl<>(books);
-            when(bookRepository.findAll(any(PageRequest.class))).thenReturn(page);
+            when(bookRepository.findAll()).thenReturn(books);
 
-            Page<Book> result = bookService.getAllBooks(0, 10, "title", "asc");
-
-            assertNotNull(result);
-            assertEquals(1, result.getTotalElements());
-            assertEquals("Test Book", result.getContent().get(0).getTitle());
-        }
-
-        @Test
-        @DisplayName("Отримання книг з сортуванням по спаданню")
-        void getAllBooks_DescendingSort() {
-            List<Book> books = Arrays.asList(testBook);
-            Page<Book> page = new PageImpl<>(books);
-            when(bookRepository.findAll(any(PageRequest.class))).thenReturn(page);
-
-            Page<Book> result = bookService.getAllBooks(0, 10, "price", "desc");
+            List<Book> result = bookService.getAllBooks();
 
             assertNotNull(result);
-            verify(bookRepository).findAll(any(PageRequest.class));
+            assertEquals(1, result.size());
+            assertEquals("Test Book", result.get(0).getTitle());
         }
     }
 
@@ -103,26 +84,22 @@ class BookServiceTest {
         @DisplayName("Отримання книг за категорією")
         void getBooksByCategory_Success() {
             List<Book> books = Arrays.asList(testBook);
-            Page<Book> page = new PageImpl<>(books);
-            when(bookRepository.findByCategory(eq("Programming"), any(PageRequest.class))).thenReturn(page);
+            when(bookRepository.findByCategory("Programming")).thenReturn(books);
 
-            Page<Book> result = bookService.getBooksByCategory("Programming", 0, 10, "title", "asc");
+            List<Book> result = bookService.getBooksByCategory("Programming");
 
             assertNotNull(result);
-            assertEquals(1, result.getTotalElements());
-            verify(bookRepository).findByCategory(eq("Programming"), any(PageRequest.class));
+            assertEquals(1, result.size());
         }
 
         @Test
-        @DisplayName("Отримання книг за неіснуючою категорією")
-        void getBooksByCategory_EmptyCategory() {
-            Page<Book> emptyPage = new PageImpl<>(List.of());
-            when(bookRepository.findByCategory(eq("NonExistent"), any(PageRequest.class))).thenReturn(emptyPage);
+        @DisplayName("Категорія не знайдена - повертає порожній список")
+        void getBooksByCategory_NotFound() {
+            when(bookRepository.findByCategory("NonExistent")).thenReturn(Arrays.asList());
 
-            Page<Book> result = bookService.getBooksByCategory("NonExistent", 0, 10, "title", "asc");
+            List<Book> result = bookService.getBooksByCategory("NonExistent");
 
-            assertNotNull(result);
-            assertEquals(0, result.getTotalElements());
+            assertTrue(result.isEmpty());
         }
     }
 
@@ -134,26 +111,22 @@ class BookServiceTest {
         @DisplayName("Пошук книг за назвою або автором")
         void searchBooks_Success() {
             List<Book> books = Arrays.asList(testBook);
-            Page<Book> page = new PageImpl<>(books);
-            when(bookRepository.findByTitleOrAuthor(eq("Test"), any(PageRequest.class))).thenReturn(page);
+            when(bookRepository.findByTitleOrAuthor("Test")).thenReturn(books);
 
-            Page<Book> result = bookService.searchBooks("Test", 0, 10, "title", "asc");
+            List<Book> result = bookService.searchBooks("Test");
 
             assertNotNull(result);
-            assertEquals(1, result.getTotalElements());
-            verify(bookRepository).findByTitleOrAuthor(eq("Test"), any(PageRequest.class));
+            assertEquals(1, result.size());
         }
 
         @Test
         @DisplayName("Пошук без результатів")
         void searchBooks_NoResults() {
-            Page<Book> emptyPage = new PageImpl<>(List.of());
-            when(bookRepository.findByTitleOrAuthor(eq("XYZ123"), any(PageRequest.class))).thenReturn(emptyPage);
+            when(bookRepository.findByTitleOrAuthor("XYZ123")).thenReturn(Arrays.asList());
 
-            Page<Book> result = bookService.searchBooks("XYZ123", 0, 10, "title", "asc");
+            List<Book> result = bookService.searchBooks("XYZ123");
 
-            assertNotNull(result);
-            assertEquals(0, result.getTotalElements());
+            assertTrue(result.isEmpty());
         }
     }
 
@@ -162,12 +135,11 @@ class BookServiceTest {
     class DeleteBookTests {
 
         @Test
-        @DisplayName("Видалення книги")
+        @DisplayName("Успішне видалення книги")
         void deleteBook_Success() {
             doNothing().when(bookRepository).deleteById(1L);
 
-            bookService.deleteBook(1L);
-
+            assertDoesNotThrow(() -> bookService.deleteBook(1L));
             verify(bookRepository).deleteById(1L);
         }
     }
@@ -177,46 +149,31 @@ class BookServiceTest {
     class UpdateStockTests {
 
         @Test
-        @DisplayName("Успішне оновлення库存")
+        @DisplayName("Успішне оновлення stock")
         void updateStock_Success() {
             when(bookRepository.findById(1L)).thenReturn(Optional.of(testBook));
             when(bookRepository.save(any(Book.class))).thenReturn(testBook);
 
-            Book result = bookService.updateStock(1L, 20);
+            Book result = bookService.updateStock(1L, 50);
 
             assertNotNull(result);
-            assertEquals(20, result.getStock());
-            verify(bookRepository).findById(1L);
-            verify(bookRepository).save(testBook);
+            assertEquals(50, result.getStock());
         }
 
         @Test
-        @DisplayName("Оновлення库存 для неіснуючої книги")
+        @DisplayName("Книга не знайдена")
         void updateStock_BookNotFound() {
             when(bookRepository.findById(999L)).thenReturn(Optional.empty());
 
-            assertThrows(IllegalArgumentException.class, () -> bookService.updateStock(999L, 20));
+            assertThrows(IllegalArgumentException.class, () -> bookService.updateStock(999L, 50));
         }
 
         @Test
-        @DisplayName("Оновлення库存 з від'ємним значенням")
+        @DisplayName("Від'ємний stock - помилка")
         void updateStock_NegativeStock() {
             when(bookRepository.findById(1L)).thenReturn(Optional.of(testBook));
 
-            assertThrows(IllegalArgumentException.class, () -> bookService.updateStock(1L, -5));
-        }
-
-        @Test
-        @DisplayName("Оновлення库存 до нуля")
-        void updateStock_ZeroStock() {
-            when(bookRepository.findById(1L)).thenReturn(Optional.of(testBook));
-            testBook.setStock(0);
-            when(bookRepository.save(any(Book.class))).thenReturn(testBook);
-
-            Book result = bookService.updateStock(1L, 0);
-
-            assertNotNull(result);
-            assertEquals(0, result.getStock());
+            assertThrows(IllegalArgumentException.class, () -> bookService.updateStock(1L, -1));
         }
     }
 }

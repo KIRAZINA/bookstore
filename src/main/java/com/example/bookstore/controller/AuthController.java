@@ -1,19 +1,14 @@
 package com.example.bookstore.controller;
 
-import com.example.bookstore.controller.dto.LoginRequest;
 import com.example.bookstore.controller.dto.RegisterRequest;
 import com.example.bookstore.controller.dto.RegisterResponse;
 import com.example.bookstore.model.AppUser;
-import com.example.bookstore.service.JwtService;
 import com.example.bookstore.service.UserService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.ResponseEntity;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.web.bind.annotation.*;
-
-import java.util.Optional;
 
 @RestController
 @RequestMapping("/api/auth")
@@ -21,13 +16,9 @@ public class AuthController {
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
 
     private final UserService userService;
-    private final JwtService jwtService;
-    private final PasswordEncoder passwordEncoder;
 
-    public AuthController(UserService userService, JwtService jwtService, PasswordEncoder passwordEncoder) {
+    public AuthController(UserService userService) {
         this.userService = userService;
-        this.jwtService = jwtService;
-        this.passwordEncoder = passwordEncoder;
     }
 
     @PostMapping("/register")
@@ -38,7 +29,7 @@ public class AuthController {
         user.setPassword(request.getPassword());
         user.setEmail(request.getEmail());
         AppUser saved = userService.registerUser(user);
-        
+
         RegisterResponse response = new RegisterResponse(
             saved.getId(),
             saved.getUsername(),
@@ -48,24 +39,21 @@ public class AuthController {
         return ResponseEntity.ok(response);
     }
 
-    @PostMapping("/login")
-    public ResponseEntity<String> login(@Valid @RequestBody LoginRequest request) {
-        log.info("Login attempt: Searching for user = {}", request.getUsername());
-
-        Optional<AppUser> userOpt = userService.findByUsername(request.getUsername());
-        if (userOpt.isEmpty()) {
-            log.warn("User not found: {}", request.getUsername());
-            return ResponseEntity.status(401).body("Invalid credentials");
+    /**
+     * Login is handled by Spring Security formLogin filter at /api/auth/login
+     * This endpoint just returns 200 if user is authenticated
+     */
+    @GetMapping("/me")
+    public ResponseEntity<RegisterResponse> getCurrentUser(@org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails) {
+        if (userDetails == null) {
+            return ResponseEntity.status(401).build();
         }
-
-        AppUser appUser = userOpt.get();
-        if (!passwordEncoder.matches(request.getPassword(), appUser.getPassword())) {
-            log.warn("Password mismatch for user: {}", request.getUsername());
-            return ResponseEntity.status(401).body("Invalid credentials");
-        }
-
-        log.info("Success! Generating token for user: {}", appUser.getUsername());
-        String token = jwtService.generateToken(appUser.getUsername());
-        return ResponseEntity.ok(token);
+        AppUser user = userService.findByUsername(userDetails.getUsername()).orElseThrow();
+        return ResponseEntity.ok(new RegisterResponse(
+            user.getId(),
+            user.getUsername(),
+            user.getEmail(),
+            user.getRole()
+        ));
     }
 }
