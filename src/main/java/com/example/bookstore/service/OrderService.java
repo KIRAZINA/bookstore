@@ -1,12 +1,7 @@
 package com.example.bookstore.service;
 
 import com.example.bookstore.config.SecurityUtils;
-import com.example.bookstore.model.AppUser;
-import com.example.bookstore.model.Book;
-import com.example.bookstore.model.Cart;
-import com.example.bookstore.model.CartItem;
-import com.example.bookstore.model.Order;
-import com.example.bookstore.model.OrderItem;
+import com.example.bookstore.model.*;
 import com.example.bookstore.repository.BookRepository;
 import com.example.bookstore.repository.OrderRepository;
 import org.springframework.data.domain.Page;
@@ -16,9 +11,6 @@ import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.time.LocalDateTime;
-import java.util.stream.Collectors;
-
 @Service
 public class OrderService {
     private final OrderRepository orderRepository;
@@ -26,7 +18,7 @@ public class OrderService {
     private final BookRepository bookRepository;
     private final SecurityUtils securityUtils;
 
-    public OrderService(OrderRepository orderRepository, CartService cartService, 
+    public OrderService(OrderRepository orderRepository, CartService cartService,
                        BookRepository bookRepository, SecurityUtils securityUtils) {
         this.orderRepository = orderRepository;
         this.cartService = cartService;
@@ -43,6 +35,7 @@ public class OrderService {
             throw new IllegalStateException("Cart is empty");
         }
 
+        // Validate stock availability before attempting modifications
         for (CartItem item : cart.getItems()) {
             Book book = item.getBook();
             if (book.getStock() < item.getQuantity()) {
@@ -52,30 +45,25 @@ public class OrderService {
 
         Order order = new Order();
         order.setUser(user);
-        order.setCreatedAt(LocalDateTime.now());
+        order.setStatus(OrderStatus.PENDING);
 
-        order.setItems(cart.getItems().stream()
-                .map(item -> {
-                    OrderItem orderItem = new OrderItem();
-                    orderItem.setBook(item.getBook());
-                    orderItem.setQuantity(item.getQuantity());
-                    orderItem.setPrice(item.getBook().getPrice());
-                    return orderItem;
-                })
-                .collect(Collectors.toList()));
+        // Create order items with frozen prices from cart (priceAtAdd)
+        for (CartItem cartItem : cart.getItems()) {
+            Book book = cartItem.getBook();
 
-        order.getItems().forEach(order::addItem);
-
-        order.setTotalPrice(order.getItems().stream()
-                .mapToDouble(item -> item.getQuantity() * item.getPrice())
-                .sum());
-
-        for (CartItem item : cart.getItems()) {
-            Book book = item.getBook();
-            book.setStock(book.getStock() - item.getQuantity());
+            // Deduct stock (optimistic locking enforced by @Version)
+            book.setStock(book.getStock() - cartItem.getQuantity());
             bookRepository.save(book);
+
+            OrderItem orderItem = new OrderItem();
+            orderItem.setBook(book);
+            orderItem.setQuantity(cartItem.getQuantity());
+            orderItem.setUnitPrice(cartItem.getPriceAtAdd());  // Frozen price at add time
+            orderItem.recalculateSubtotal();
+            order.addItem(orderItem);
         }
 
+        order.calculateTotal();
         orderRepository.save(order);
         cartService.clearCart();
 

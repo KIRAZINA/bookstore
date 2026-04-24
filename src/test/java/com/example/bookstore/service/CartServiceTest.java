@@ -16,6 +16,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -52,7 +53,7 @@ class CartServiceTest {
         testBook = new Book();
         testBook.setId(1L);
         testBook.setTitle("Test Book");
-        testBook.setPrice(29.99);
+        testBook.setPrice(new BigDecimal("29.99"));
         testBook.setStock(10);
 
         testCart = new Cart();

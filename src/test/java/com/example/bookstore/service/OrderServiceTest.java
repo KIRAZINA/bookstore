@@ -14,11 +14,10 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
-import org.springframework.data.domain.PageRequest;
+import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
-import java.time.LocalDateTime;
+import java.math.BigDecimal;
 import java.util.List;
-import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -75,6 +74,34 @@ class OrderServiceTest {
 
             assertThrows(IllegalStateException.class, () -> orderService.createOrder());
         }
+
+        @Test
+        @DisplayName("Створення замовлення при конкурентному оновленні stock")
+        void createOrder_OptimisticLockConflict() {
+            Book book = new Book();
+            book.setId(10L);
+            book.setTitle("Concurrent Book");
+            book.setPrice(new BigDecimal("19.99"));
+            book.setStock(5);
+
+            CartItem cartItem = new CartItem();
+            cartItem.setBook(book);
+            cartItem.setQuantity(2);
+            cartItem.setPriceAtAdd(new BigDecimal("19.99"));
+
+            Cart cart = new Cart();
+            cart.setUser(testUser);
+            cart.addItem(cartItem);
+
+            when(securityUtils.getCurrentUser()).thenReturn(testUser);
+            when(cartService.getCart()).thenReturn(cart);
+            when(bookRepository.save(any(Book.class)))
+                    .thenThrow(new ObjectOptimisticLockingFailureException(Book.class, 10L));
+
+            assertThrows(ObjectOptimisticLockingFailureException.class, () -> orderService.createOrder());
+            verify(orderRepository, never()).save(any(Order.class));
+            verify(cartService, never()).clearCart();
+        }
     }
 
     @Nested
@@ -86,7 +113,7 @@ class OrderServiceTest {
             Order order = new Order();
             order.setId(1L);
             order.setUser(testUser);
-            order.setTotalPrice(100.0);
+            order.setTotalPrice(new BigDecimal("100.0"));
             Page<Order> page = new PageImpl<>(List.of(order));
 
             when(securityUtils.getCurrentUser()).thenReturn(testUser);

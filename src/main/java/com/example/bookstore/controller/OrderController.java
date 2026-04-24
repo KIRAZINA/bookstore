@@ -1,11 +1,17 @@
 package com.example.bookstore.controller;
 
+import com.example.bookstore.controller.dto.OrderItemResponse;
+import com.example.bookstore.controller.dto.OrderResponse;
 import com.example.bookstore.model.Order;
+import com.example.bookstore.model.OrderItem;
 import com.example.bookstore.service.OrderService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
+
+import java.util.List;
+import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/orders")
@@ -18,17 +24,44 @@ public class OrderController {
 
     @PostMapping
     @PreAuthorize("hasRole('USER')")
-    public ResponseEntity<Order> createOrder() {
-        return ResponseEntity.ok(orderService.createOrder());
+    public ResponseEntity<OrderResponse> createOrder() {
+        return ResponseEntity.ok(toOrderResponse(orderService.createOrder()));
     }
 
     @GetMapping
     @PreAuthorize("hasRole('USER')")
-    public ResponseEntity<Page<Order>> getUserOrders(
+    public ResponseEntity<Page<OrderResponse>> getUserOrders(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String direction) {
-        return ResponseEntity.ok(orderService.getUserOrders(page, size, sortBy, direction));
+        return ResponseEntity.ok(orderService.getUserOrders(page, size, sortBy, direction).map(this::toOrderResponse));
+    }
+
+    private OrderResponse toOrderResponse(Order order) {
+        List<OrderItemResponse> items = order.getItems().stream()
+                .map(this::toOrderItemResponse)
+                .collect(Collectors.toList());
+        return new OrderResponse(
+                order.getId(),
+                order.getUser().getId(),
+                order.getUser().getUsername(),
+                order.getStatus(),
+                order.getCreatedAt(),
+                items,
+                order.getTotalPrice()
+        );
+    }
+
+    private OrderItemResponse toOrderItemResponse(OrderItem item) {
+        return new OrderItemResponse(
+                item.getId(),
+                item.getBook().getId(),
+                item.getBook().getTitle(),
+                item.getBook().getAuthor(),
+                item.getQuantity(),
+                item.getUnitPrice(),
+                item.getSubtotal()
+        );
     }
 }

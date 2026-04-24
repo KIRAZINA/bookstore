@@ -11,6 +11,7 @@ import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.math.BigDecimal;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -36,7 +37,7 @@ class BookServiceTest {
         testBook.setId(1L);
         testBook.setTitle("Test Book");
         testBook.setAuthor("Test Author");
-        testBook.setPrice(29.99);
+        testBook.setPrice(new BigDecimal("29.99"));
         testBook.setStock(10);
         testBook.setCategory("Programming");
     }

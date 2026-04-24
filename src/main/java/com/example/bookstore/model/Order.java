@@ -4,6 +4,7 @@ import jakarta.persistence.*;
 import jakarta.validation.constraints.Positive;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -30,13 +31,18 @@ public class Order {
     @CreatedDate
     private LocalDateTime createdAt;
 
-    @Column(name = "total_price", nullable = false)
-    @Positive(message = "Total price must be positive")
-    private double totalPrice;
+    @Column(name = "total_price", nullable = false, precision = 19, scale = 4)
+    private BigDecimal totalPrice;
 
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "order_id")
+    @Column(name = "status", nullable = false)
+    @Enumerated(EnumType.STRING)
+    private OrderStatus status = OrderStatus.PENDING;
+
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<OrderItem> items = new ArrayList<>();
+
+    @Version
+    private Long version;
 
     @PrePersist
     protected void onCreate() {
@@ -47,6 +53,7 @@ public class Order {
 
     public void addItem(OrderItem item) {
         items.add(item);
+        item.setOrder(this);
     }
 
     public List<OrderItem> getItems() {
@@ -57,7 +64,9 @@ public class Order {
         this.items = new ArrayList<>(items);
     }
 
-    // Custom getUser and setUser methods removed - using standard Lombok getters/setters
-    // Fields id and user already have generated getter/setter from @Getter @Setter
-
+    public void calculateTotal() {
+        this.totalPrice = items.stream()
+            .map(OrderItem::getSubtotal)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 }

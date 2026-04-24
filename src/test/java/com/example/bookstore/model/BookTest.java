@@ -1,6 +1,7 @@
 package com.example.bookstore.model;
 
 import org.junit.jupiter.api.Test;
+import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -12,14 +13,14 @@ class BookTest {
         book.setId(1L);
         book.setTitle("Test Book");
         book.setAuthor("Test Author");
-        book.setPrice(19.99);
+        book.setPrice(new BigDecimal("19.99"));
         book.setCategory("Fiction");
         book.setStock(10);
 
         assertEquals(1L, book.getId());
         assertEquals("Test Book", book.getTitle());
         assertEquals("Test Author", book.getAuthor());
-        assertEquals(19.99, book.getPrice());
+        assertEquals(new BigDecimal("19.99"), book.getPrice());
         assertEquals("Fiction", book.getCategory());
         assertEquals(10, book.getStock());
     }

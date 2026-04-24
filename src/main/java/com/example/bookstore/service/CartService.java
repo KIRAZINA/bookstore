@@ -56,7 +56,8 @@ public class CartService {
             CartItem item = new CartItem();
             item.setBook(book);
             item.setQuantity(quantity);
-            cart.getItems().add(item);
+            item.setPriceAtAdd(book.getPrice());
+            cart.addItem(item);
         }
         return cartRepository.save(cart);
     }
@@ -84,14 +85,17 @@ public class CartService {
     @Transactional
     public Cart removeFromCart(Long bookId) {
         Cart cart = getCart();
-        cart.getItems().removeIf(item -> item.getBook().getId().equals(bookId));
+        cart.getItems().stream()
+                .filter(item -> item.getBook().getId().equals(bookId))
+                .findFirst()
+                .ifPresent(cart::removeItem);
         return cartRepository.save(cart);
     }
 
     @Transactional
     public void clearCart() {
         Cart cart = getCart();
-        cart.getItems().clear();
+        cart.clearItems();
         cartRepository.save(cart);
     }
 }

@@ -168,53 +168,77 @@ class AuthControllerTest {
         @Test
         @DisplayName("Успішний логін")
         void login_Success() throws Exception {
+            LoginRequest request = new LoginRequest();
+            request.setUsername("logintest");
+            request.setPassword("password123");
+
             mockMvc.perform(post("/api/auth/login")
-                            .param("username", "logintest")
-                            .param("password", "password123"))
-                    .andExpect(status().isOk());
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.token").exists())
+                    .andExpect(jsonPath("$.type").value("Bearer"))
+                    .andExpect(jsonPath("$.username").value("logintest"));
         }
 
         @Test
         @DisplayName("Логін - невірний пароль")
         void login_WrongPassword() throws Exception {
+            LoginRequest request = new LoginRequest();
+            request.setUsername("logintest");
+            request.setPassword("wrongpassword");
+
             mockMvc.perform(post("/api/auth/login")
-                            .param("username", "logintest")
-                            .param("password", "wrongpassword"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isUnauthorized());
         }
 
         @Test
         @DisplayName("Логін - користувач не існує")
         void login_UserNotFound() throws Exception {
+            LoginRequest request = new LoginRequest();
+            request.setUsername("nonexistent");
+            request.setPassword("password123");
+
             mockMvc.perform(post("/api/auth/login")
-                            .param("username", "nonexistent")
-                            .param("password", "password123"))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isUnauthorized());
         }
 
         @Test
         @DisplayName("Логін - порожній username")
         void login_BlankUsername() throws Exception {
+            LoginRequest request = new LoginRequest();
+            request.setUsername("");
+            request.setPassword("password123");
+
             mockMvc.perform(post("/api/auth/login")
-                            .param("username", "")
-                            .param("password", "password123"))
-                    .andExpect(status().isUnauthorized());
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest());
         }
 
         @Test
         @DisplayName("Логін - порожній пароль")
         void login_BlankPassword() throws Exception {
+            LoginRequest request = new LoginRequest();
+            request.setUsername("logintest");
+            request.setPassword("");
+
             mockMvc.perform(post("/api/auth/login")
-                            .param("username", "logintest")
-                            .param("password", ""))
-                    .andExpect(status().isUnauthorized());
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isBadRequest());
         }
 
         @Test
-        @DisplayName("Логін - без параметрів")
-        void login_EmptyParams() throws Exception {
-            mockMvc.perform(post("/api/auth/login"))
-                    .andExpect(status().isUnauthorized());
+        @DisplayName("Логін - без тіла запиту")
+        void login_EmptyBody() throws Exception {
+            mockMvc.perform(post("/api/auth/login")
+                            .contentType(MediaType.APPLICATION_JSON))
+                    .andExpect(status().isBadRequest());
         }
     }
 }

@@ -1,10 +1,21 @@
 package com.example.bookstore.model;
 
-import jakarta.persistence.*;
+import java.math.BigDecimal;
+
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.GeneratedValue;
+import jakarta.persistence.GenerationType;
+import jakarta.persistence.Id;
+import jakarta.persistence.Version;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.PositiveOrZero;
-import lombok.*;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.Setter;
+import lombok.ToString;
 
 @Entity
 @Getter
@@ -25,13 +36,17 @@ public class Book {
     @NotBlank(message = "Author is required")
     private String author;
 
-    @Column(nullable = false)
-    @Positive(message = "Price must be positive")
-    private double price;
+    @Column(nullable = false, precision = 19, scale = 4)
+    @NotNull(message = "Price is required")
+    @DecimalMin(value = "0.0001", message = "Price must be positive")
+    private BigDecimal price;
 
     private String category;
 
     @Column(nullable = false)
     @PositiveOrZero(message = "Stock cannot be negative")
     private int stock;
+
+    @Version
+    private Long version;
 }

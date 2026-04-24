@@ -2,15 +2,15 @@
 
 [![Build Status](https://github.com/KIRAZINA/bookstore/actions/workflows/maven.yml/badge.svg)](https://github.com/KIRAZINA/bookstore/actions/workflows/maven.yml) [![Java 17](https://img.shields.io/badge/Java-17-blue)](https://openjdk.java.net/projects/jdk/17/) [![Spring Boot](https://img.shields.io/badge/Spring_Boot-3.5-green)](https://spring.io/projects/spring-boot)
 
-Spring Boot application for an online bookstore API with session-based authentication.
+Spring Boot application for an online bookstore API with JWT-based authentication.
 
 ## Features
-- **Authentication**: Session-based login/register with secure password encoding
+- **Authentication**: JWT login/register with secure password encoding
 - **CRUD**: Books (admin only for modifications)
-- **Shopping Cart**: Add, update, remove items
+- **Shopping Cart**: Add, update, remove items via RESTful item endpoints
 - **Orders**: Create orders from cart, view order history
 - **Database**: H2 in-memory (for dev), PostgreSQL ready (production)
-- **Security**: Spring Security with session-based authentication, USER/ADMIN roles
+- **Security**: Spring Security with stateless JWT, USER/ADMIN roles
 
 ## Setup
 - JDK 17+
@@ -35,7 +35,7 @@ Spring Boot application for an online bookstore API with session-based authentic
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | POST | `/api/auth/register` | Register new user |
-| POST | `/api/auth/login` | Login (form-based) |
+| POST | `/api/auth/login` | Login and receive JWT |
 | GET | `/api/auth/me` | Get current user |
 
 ### Books
@@ -43,19 +43,19 @@ Spring Boot application for an online bookstore API with session-based authentic
 |--------|----------|-------------|
 | GET | `/api/books` | List all books |
 | GET | `/api/books?category=Fiction` | Filter by category |
-| GET | `/api/books/search?search=java` | Search by title/author |
+| GET | `/api/books/search?query=java` | Search by title/author |
 | POST | `/api/books` | Add new book (ADMIN) |
 | DELETE | `/api/books/{id}` | Delete book (ADMIN) |
-| PUT | `/api/books/{id}/stock?stock=10` | Update stock (ADMIN) |
+| PUT | `/api/books/{id}/stock` | Update stock (ADMIN, JSON body) |
 
 ### Cart
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/api/cart` | View cart |
-| POST | `/api/cart/add?bookId=1&quantity=2` | Add item |
-| PUT | `/api/cart/update?bookId=1&quantity=5` | Update quantity |
-| DELETE | `/api/cart/remove?bookId=1` | Remove item |
-| DELETE | `/api/cart/clear` | Clear cart |
+| POST | `/api/cart/items` | Add item (JSON body) |
+| PUT | `/api/cart/items/{bookId}` | Update quantity (JSON body) |
+| DELETE | `/api/cart/items/{bookId}` | Remove item |
+| DELETE | `/api/cart` | Clear cart |
 
 ### Orders
 | Method | Endpoint | Description |
@@ -77,8 +77,8 @@ src/main/java/com/example/bookstore/
 └── service/         # Business logic
 ```
 
-## Simplifications Applied
-- Removed JWT (using sessions instead)
-- Removed pagination (simple list-based API)
-- Removed EmailService (stub - add when needed)
-- Clean code with SecurityUtils for user context
+## API Notes
+- Mutating endpoints use `@RequestBody` DTOs, not query params
+- Monetary values use `BigDecimal`
+- Checkout uses frozen cart price (`priceAtAdd`) for order item pricing
+- Stock updates are protected by optimistic locking semantics

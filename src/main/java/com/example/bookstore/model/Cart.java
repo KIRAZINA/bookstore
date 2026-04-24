@@ -2,7 +2,6 @@ package com.example.bookstore.model;
 
 import jakarta.persistence.*;
 import lombok.*;
-import java.util.Collections;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -22,18 +21,38 @@ public class Cart {
     @ToString.Exclude
     private AppUser user;
 
-    @OneToMany(cascade = CascadeType.ALL, orphanRemoval = true)
-    @JoinColumn(name = "cart_id")
+    @OneToMany(mappedBy = "cart", cascade = CascadeType.ALL, orphanRemoval = true)
     private List<CartItem> items = new ArrayList<>();
 
     public List<CartItem> getItems() {
-        return new ArrayList<>(items);
+        return items;
     }
 
     public void setItems(List<CartItem> items) {
-        this.items = new ArrayList<>(items);
+        this.items.clear();
+        if (items != null) {
+            items.forEach(this::addItem);
+        }
     }
 
-    // Custom getUser and setUser methods removed - using standard Lombok getters/setters
-    // Fields id and user already have generated getter/setter from @Getter @Setter
+    public void addItem(CartItem item) {
+        if (item == null) {
+            return;
+        }
+        items.add(item);
+        item.setCart(this);
+    }
+
+    public void removeItem(CartItem item) {
+        if (item == null) {
+            return;
+        }
+        items.remove(item);
+        item.setCart(null);
+    }
+
+    public void clearItems() {
+        items.forEach(item -> item.setCart(null));
+        items.clear();
+    }
 }
