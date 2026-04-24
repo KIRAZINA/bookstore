@@ -1,46 +1,61 @@
-# Maven build
+# Build output
 target/
+out/
+build/
+dist/
+
+# Java / Maven artifacts
+*.class
 *.jar
 *.war
 *.ear
+hs_err_pid*
+replay_pid*
+
+# Maven release / versions plugin files
 pom.xml.tag
 pom.xml.releaseBackup
 pom.xml.versionsBackup
 pom.xml.next
 release.properties
-
-# Maven wrapper
-.mvn/
-
-# IntelliJ IDEA
-.idea/
-*.iws
-*.iml
-*.ipr
-out/
-
-# VS Code
-.vscode/
-
-# Eclipse
-.settings/
-.classpath
-.project
-
-# H2 DB files
-*.mv.db
-*.trace.db
-
-# OS
-.DS_Store
-Thumbs.db
+dependency-reduced-pom.xml
 
 # Logs
 *.log
 logs/
 
-# Compiled classes
-*.class
+# Local databases
+*.mv.db
+*.trace.db
 
-# Test output
+# IDEs
+.idea/
+*.iws
+*.iml
+*.ipr
+.vscode/
+.settings/
+.classpath
+.project
+.factorypath
+
+# OS files
+.DS_Store
+Thumbs.db
+Desktop.ini
+
+# Temporary / patch files
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*.orig
+
+# Test reports outside target
 test-output/
+
+# Local environment files
+.env
+.env.*
+!.env.example
