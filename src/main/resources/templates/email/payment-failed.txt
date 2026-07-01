@@ -1,0 +1,12 @@
+Payment Failed #{{orderId}}
+
+Dear {{userName}},
+
+Your payment for order #{{orderId}} has failed.
+
+Amount: ${{amount}}
+Reason: {{failureReason}}
+
+Please try again or contact support.
+
+Bookstore Team

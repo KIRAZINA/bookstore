@@ -9,7 +9,6 @@ import org.springframework.security.config.annotation.authentication.configurati
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
-import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -20,11 +19,6 @@ import org.springframework.security.web.authentication.UsernamePasswordAuthentic
 @EnableWebSecurity
 @EnableMethodSecurity
 public class SecurityConfig {
-
-    @Bean
-    public WebSecurityCustomizer webSecurityCustomizer() {
-        return (web) -> web.ignoring().requestMatchers("/h2-console/**");
-    }
 
     @Bean
     public SecurityFilterChain securityFilterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
@@ -38,11 +32,11 @@ public class SecurityConfig {
                 .requestMatchers(HttpMethod.POST, "/api/books/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.PUT, "/api/books/**").hasRole("ADMIN")
                 .requestMatchers(HttpMethod.DELETE, "/api/books/**").hasRole("ADMIN")
-                .requestMatchers("/api/cart/**", "/api/orders/**").hasRole("USER")
+                .requestMatchers("/api/admin/**").hasRole("ADMIN")
+                .requestMatchers("/api/cart/**", "/api/orders/**", "/api/payments/**").hasRole("USER")
                 .anyRequest().authenticated()
             )
-            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class)
-            .headers(headers -> headers.frameOptions(frame -> frame.disable()));
+            .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 

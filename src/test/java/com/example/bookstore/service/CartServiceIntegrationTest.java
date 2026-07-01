@@ -14,7 +14,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -26,9 +26,7 @@ import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Transactional
-@TestPropertySource(properties = {
-        "spring.datasource.url=jdbc:h2:mem:cartserviceitdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
-})
+@ActiveProfiles("test")
 class CartServiceIntegrationTest {
 
     @Autowired

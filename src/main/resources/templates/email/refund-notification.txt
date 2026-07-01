@@ -1,0 +1,12 @@
+Refund Processed #{{orderId}}
+
+Dear {{userName}},
+
+Your refund for order #{{orderId}} has been processed.
+
+Refund Amount: ${{amount}}
+Transaction ID: {{transactionId}}
+
+The refund will appear in your account within 5-10 business days.
+
+Bookstore Team

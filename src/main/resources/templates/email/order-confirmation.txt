@@ -1,0 +1,13 @@
+Order Confirmation #{{orderId}}
+
+Dear {{userName}},
+
+Your order #{{orderId}} has been successfully placed.
+
+Order Total: ${{totalPrice}}
+
+We will notify you when your order status changes.
+
+Thank you for shopping with us!
+
+Bookstore Team

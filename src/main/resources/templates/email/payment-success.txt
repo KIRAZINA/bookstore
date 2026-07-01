@@ -1,0 +1,12 @@
+Payment Successful #{{orderId}}
+
+Dear {{userName}},
+
+Your payment for order #{{orderId}} has been successfully processed.
+
+Amount Paid: ${{amount}}
+Transaction ID: {{transactionId}}
+
+Your order is now being processed.
+
+Bookstore Team

@@ -2,8 +2,10 @@ package com.example.bookstore.controller;
 
 import com.example.bookstore.controller.dto.OrderItemResponse;
 import com.example.bookstore.controller.dto.OrderResponse;
+import com.example.bookstore.controller.dto.OrderStatusHistoryResponse;
 import com.example.bookstore.model.Order;
 import com.example.bookstore.model.OrderItem;
+import com.example.bookstore.model.OrderStatusHistory;
 import com.example.bookstore.service.OrderService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -38,6 +40,26 @@ public class OrderController {
         return ResponseEntity.ok(orderService.getUserOrders(page, size, sortBy, direction).map(this::toOrderResponse));
     }
 
+    @GetMapping("/{id}")
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<OrderResponse> getOrder(@PathVariable Long id) {
+        return ResponseEntity.ok(toOrderResponse(orderService.getUserOrderById(id)));
+    }
+
+    @PostMapping("/{id}/cancel")
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<Void> cancelOrder(@PathVariable Long id) {
+        orderService.cancelOwnOrder(id);
+        return ResponseEntity.ok().build();
+    }
+
+    @GetMapping("/{id}/history")
+    @PreAuthorize("hasRole('USER')")
+    public ResponseEntity<List<OrderStatusHistoryResponse>> getOrderHistory(@PathVariable Long id) {
+        List<OrderStatusHistory> history = orderService.getOrderHistoryForUser(id);
+        return ResponseEntity.ok(history.stream().map(this::toHistoryResponse).collect(Collectors.toList()));
+    }
+
     private OrderResponse toOrderResponse(Order order) {
         List<OrderItemResponse> items = order.getItems().stream()
                 .map(this::toOrderItemResponse)
@@ -62,6 +84,17 @@ public class OrderController {
                 item.getQuantity(),
                 item.getUnitPrice(),
                 item.getSubtotal()
+        );
+    }
+
+    private OrderStatusHistoryResponse toHistoryResponse(OrderStatusHistory h) {
+        return new OrderStatusHistoryResponse(
+                h.getId(),
+                h.getPreviousStatus(),
+                h.getNewStatus(),
+                h.getChangedBy(),
+                h.getComment(),
+                h.getCreatedAt()
         );
     }
 }

@@ -1,0 +1,40 @@
+spring:
+  application:
+    name: bookstore
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/bookstore
+    username: bookstore
+    password: bookstore
+
+  jpa:
+    hibernate:
+      ddl-auto: none
+    open-in-view: false
+    show-sql: false
+
+  mail:
+    # Uncomment to enable SMTP email sending:
+    # host: localhost
+    # port: 1025
+    properties:
+      mail.smtp.auth: false
+      mail.smtp.starttls.enable: false
+
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+    baseline-on-migrate: true
+
+jwt:
+  secret: mySecretKeyForBookstoreApplication12345
+  expiration: 86400000
+
+server:
+  port: 8080
+
+logging:
+  level:
+    root: INFO
+    com.example.bookstore: DEBUG
+    org.hibernate.SQL: WARN

@@ -1,5 +1,7 @@
 package com.example.bookstore.config;
 
+import com.example.bookstore.exception.InvalidPaymentStateException;
+import com.example.bookstore.exception.PaymentException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -46,5 +48,21 @@ public class GlobalExceptionHandler {
         error.put("error", "Concurrent modification detected. Please retry.");
         error.put("code", "CONCURRENT_MODIFICATION");
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
+    }
+
+    @ExceptionHandler(PaymentException.class)
+    public ResponseEntity<Map<String, String>> handlePaymentException(PaymentException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        error.put("code", "PAYMENT_ERROR");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
+    }
+
+    @ExceptionHandler(InvalidPaymentStateException.class)
+    public ResponseEntity<Map<String, String>> handleInvalidPaymentState(InvalidPaymentStateException ex) {
+        Map<String, String> error = new HashMap<>();
+        error.put("error", ex.getMessage());
+        error.put("code", "INVALID_PAYMENT_STATE");
+        return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
     }
 }

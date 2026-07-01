@@ -1,7 +1,6 @@
 package com.example.bookstore.model;
 
 import jakarta.persistence.*;
-import jakarta.validation.constraints.Positive;
 import lombok.*;
 import org.springframework.data.annotation.CreatedDate;
 import java.math.BigDecimal;
@@ -41,6 +40,14 @@ public class Order {
     @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.EAGER)
     private List<OrderItem> items = new ArrayList<>();
 
+    @OneToMany(mappedBy = "order", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
+    @ToString.Exclude
+    private List<OrderStatusHistory> statusHistory = new ArrayList<>();
+
+    @OneToOne(mappedBy = "order", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
+    @ToString.Exclude
+    private com.example.bookstore.model.Payment payment;
+
     @Version
     private Long version;
 
@@ -68,5 +75,34 @@ public class Order {
         this.totalPrice = items.stream()
             .map(OrderItem::getSubtotal)
             .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    public OrderStatusHistory recordTransition(OrderStatus newStatus, String changedBy, String comment) {
+        OrderStatusHistory history = new OrderStatusHistory();
+        history.setOrder(this);
+        history.setPreviousStatus(this.status);
+        history.setNewStatus(newStatus);
+        history.setChangedBy(changedBy);
+        history.setComment(comment);
+        history.setCreatedAt(LocalDateTime.now());
+        this.status = newStatus;
+        this.statusHistory.add(history);
+        return history;
+    }
+
+    public List<OrderStatusHistory> getStatusHistory() {
+        return Collections.unmodifiableList(statusHistory);
+    }
+
+    public com.example.bookstore.model.Payment getPayment() {
+        return payment;
+    }
+
+    public void setPayment(com.example.bookstore.model.Payment payment) {
+        this.payment = payment;
+    }
+
+    public boolean isCancelable() {
+        return status.isCancelable();
     }
 }

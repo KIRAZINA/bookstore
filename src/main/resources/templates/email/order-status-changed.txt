@@ -1,0 +1,12 @@
+Order Status Update #{{orderId}}
+
+Dear {{userName}},
+
+Your order #{{orderId}} status has been updated.
+
+Previous Status: {{previousStatus}}
+New Status: {{newStatus}}
+
+Thank you for your patience.
+
+Bookstore Team

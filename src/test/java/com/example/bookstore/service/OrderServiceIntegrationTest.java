@@ -1,33 +1,30 @@
 package com.example.bookstore.service;
 
 import com.example.bookstore.config.SecurityUtils;
-import com.example.bookstore.model.AppUser;
-import com.example.bookstore.model.Book;
-import com.example.bookstore.model.Order;
-import com.example.bookstore.model.OrderItem;
-import com.example.bookstore.model.UserRole;
+import com.example.bookstore.model.*;
 import com.example.bookstore.repository.BookRepository;
+import com.example.bookstore.repository.OrderRepository;
+import com.example.bookstore.repository.OrderStatusHistoryRepository;
+import com.example.bookstore.repository.PaymentRepository;
 import com.example.bookstore.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
 @Transactional
-@TestPropertySource(properties = {
-        "spring.datasource.url=jdbc:h2:mem:orderserviceitdb;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE"
-})
+@ActiveProfiles("test")
 class OrderServiceIntegrationTest {
 
     @Autowired
@@ -42,29 +39,50 @@ class OrderServiceIntegrationTest {
     @Autowired
     private BookRepository bookRepository;
 
+    @Autowired
+    private OrderRepository orderRepository;
+
+    @Autowired
+    private OrderStatusHistoryRepository orderStatusHistoryRepository;
+
+    @Autowired
+    private PaymentRepository paymentRepository;
+
     @MockitoBean
     private SecurityUtils securityUtils;
 
-    @Test
-    @DisplayName("Checkout uses frozen cart price after catalog price changes")
-    void createOrder_UsesPriceAtAdd_NotCurrentBookPrice() {
+    private AppUser createUser() {
         AppUser user = new AppUser();
         user.setUsername("order-it-" + UUID.randomUUID());
         user.setPassword("password");
         user.setEmail("order-it@example.com");
         user.setRole(UserRole.ROLE_USER);
-        user = userRepository.save(user);
+        return userRepository.save(user);
+    }
 
+    private Book createBook(String title, BigDecimal price, int stock) {
         Book book = new Book();
-        book.setTitle("Price Freeze Book");
-        book.setAuthor("Architect");
-        book.setPrice(new BigDecimal("10.00"));
+        book.setTitle(title);
+        book.setAuthor("Author");
+        book.setPrice(price);
         book.setCategory("Testing");
-        book.setStock(10);
-        book = bookRepository.save(book);
+        book.setStock(stock);
+        return bookRepository.save(book);
+    }
+
+    private Order createOrder(AppUser user, Book book, int quantity) {
+        when(securityUtils.getCurrentUser()).thenReturn(user);
+        cartService.addToCart(book.getId(), quantity);
+        return orderService.createOrder();
+    }
+
+    @Test
+    @DisplayName("Checkout uses frozen cart price after catalog price changes")
+    void createOrder_UsesPriceAtAdd_NotCurrentBookPrice() {
+        AppUser user = createUser();
+        Book book = createBook("Price Freeze Book", new BigDecimal("10.00"), 10);
 
         when(securityUtils.getCurrentUser()).thenReturn(user);
-
         cartService.addToCart(book.getId(), 2);
 
         book.setPrice(new BigDecimal("20.00"));
@@ -81,5 +99,106 @@ class OrderServiceIntegrationTest {
 
         Book updatedBook = bookRepository.findById(book.getId()).orElseThrow();
         assertEquals(8, updatedBook.getStock());
+    }
+
+    @Test
+    @DisplayName("Payment is created alongside order with PENDING status")
+    void createOrder_CreatesPayment() {
+        AppUser user = createUser();
+        Book book = createBook("Payment Order Book", new BigDecimal("25.00"), 10);
+        Order order = createOrder(user, book, 2);
+
+        assertNotNull(order.getId());
+        assertTrue(paymentRepository.findByOrderId(order.getId()).isPresent());
+        com.example.bookstore.model.Payment payment = paymentRepository.findByOrderId(order.getId()).orElseThrow();
+        assertEquals(com.example.bookstore.model.PaymentStatus.PENDING, payment.getPaymentStatus());
+        assertEquals(new BigDecimal("50.00"), payment.getAmount());
+        assertEquals("DUMMY", payment.getPaymentProvider());
+    }
+
+    @Test
+    @DisplayName("Order status transitions and history are persisted")
+    void orderStatusTransition_PersistsHistory() {
+        AppUser user = createUser();
+        Book book = createBook("Transition Test Book", new BigDecimal("15.00"), 10);
+        Order order = createOrder(user, book, 1);
+
+        assertNotNull(order.getId());
+        assertEquals(OrderStatus.PENDING, order.getStatus());
+
+        orderService.updateOrderStatus(order.getId(), OrderStatus.PAID, "Payment processed");
+        Order paidOrder = orderRepository.findById(order.getId()).orElseThrow();
+        assertEquals(OrderStatus.PAID, paidOrder.getStatus());
+
+        orderService.updateOrderStatus(order.getId(), OrderStatus.PROCESSING, "Fulfillment started");
+        Order processingOrder = orderRepository.findById(order.getId()).orElseThrow();
+        assertEquals(OrderStatus.PROCESSING, processingOrder.getStatus());
+
+        List<OrderStatusHistory> history = orderService.getOrderHistory(order.getId());
+        assertEquals(2, history.size());
+        assertEquals(OrderStatus.PROCESSING, history.get(1).getNewStatus());
+        assertEquals(OrderStatus.PAID, history.get(0).getNewStatus());
+    }
+
+    @Test
+    @DisplayName("Invalid status transition throws exception")
+    void invalidStatusTransition_ThrowsException() {
+        AppUser user = createUser();
+        Book book = createBook("Invalid Transition Book", new BigDecimal("15.00"), 10);
+        Order order = createOrder(user, book, 1);
+
+        assertThrows(IllegalStateException.class,
+                () -> orderService.updateOrderStatus(order.getId(), OrderStatus.DELIVERED, ""));
+    }
+
+    @Test
+    @DisplayName("Customer can cancel own PENDING order")
+    void customerCancelsPendingOrder_Success() {
+        AppUser user = createUser();
+        Book book = createBook("Cancel Test Book", new BigDecimal("10.00"), 5);
+        Order order = createOrder(user, book, 1);
+
+        assertEquals(OrderStatus.PENDING, order.getStatus());
+
+        orderService.cancelOwnOrder(order.getId());
+        Order cancelledOrder = orderRepository.findById(order.getId()).orElseThrow();
+        assertEquals(OrderStatus.CANCELLED, cancelledOrder.getStatus());
+    }
+
+    @Test
+    @DisplayName("Admin can cancel PAID order")
+    void adminCancelsPaidOrder_Success() {
+        AppUser user = createUser();
+        Book book = createBook("Admin Cancel Book", new BigDecimal("10.00"), 5);
+        Order order = createOrder(user, book, 1);
+
+        orderService.updateOrderStatus(order.getId(), OrderStatus.PAID, "Paid");
+
+        AppUser admin = new AppUser();
+        admin.setUsername("admin");
+        when(securityUtils.getCurrentUser()).thenReturn(admin);
+
+        orderService.adminCancelOrder(order.getId(), "Admin cancellation");
+        Order cancelledOrder = orderRepository.findById(order.getId()).orElseThrow();
+        assertEquals(OrderStatus.CANCELLED, cancelledOrder.getStatus());
+    }
+
+    @Test
+    @DisplayName("History is recorded for each status change")
+    void historyRecordedForEachTransition() {
+        AppUser user = createUser();
+        Book book = createBook("History Test Book", new BigDecimal("10.00"), 5);
+        Order order = createOrder(user, book, 1);
+
+        when(securityUtils.getCurrentUser()).thenReturn(user);
+
+        orderService.updateOrderStatus(order.getId(), OrderStatus.PAID, "Paid");
+        orderService.updateOrderStatus(order.getId(), OrderStatus.PROCESSING, "Processing");
+        orderService.updateOrderStatus(order.getId(), OrderStatus.SHIPPED, "Shipped");
+        orderService.updateOrderStatus(order.getId(), OrderStatus.DELIVERED, "Delivered");
+
+        List<OrderStatusHistory> history = orderService.getOrderHistory(order.getId());
+        assertEquals(4, history.size());
+        assertEquals(OrderStatus.DELIVERED, history.get(3).getNewStatus());
     }
 }

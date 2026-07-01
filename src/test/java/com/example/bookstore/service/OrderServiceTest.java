@@ -4,7 +4,11 @@ import com.example.bookstore.config.SecurityUtils;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.BookRepository;
 import com.example.bookstore.repository.OrderRepository;
+import com.example.bookstore.repository.OrderStatusHistoryRepository;
+import com.example.bookstore.repository.PaymentRepository;
+import com.example.bookstore.service.payment.DummyPaymentProvider;
 import org.junit.jupiter.api.BeforeEach;
+import org.springframework.context.ApplicationEventPublisher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -18,6 +22,7 @@ import org.springframework.orm.ObjectOptimisticLockingFailureException;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
@@ -31,10 +36,22 @@ class OrderServiceTest {
     private OrderRepository orderRepository;
 
     @Mock
+    private OrderStatusHistoryRepository orderStatusHistoryRepository;
+
+    @Mock
     private CartService cartService;
 
     @Mock
     private BookRepository bookRepository;
+
+    @Mock
+    private PaymentRepository paymentRepository;
+
+    @Mock
+    private DummyPaymentProvider paymentProvider;
+
+    @Mock
+    private ApplicationEventPublisher eventPublisher;
 
     @Mock
     private SecurityUtils securityUtils;
@@ -43,6 +60,7 @@ class OrderServiceTest {
     private OrderService orderService;
 
     private AppUser testUser;
+    private AppUser adminUser;
 
     @BeforeEach
     void setUp() {
@@ -51,6 +69,11 @@ class OrderServiceTest {
         testUser.setUsername("testuser");
         testUser.setEmail("test@example.com");
         testUser.setRole(UserRole.ROLE_USER);
+
+        adminUser = new AppUser();
+        adminUser.setId(2L);
+        adminUser.setUsername("admin");
+        adminUser.setRole(UserRole.ROLE_ADMIN);
     }
 
     @Nested
@@ -123,6 +146,190 @@ class OrderServiceTest {
 
             assertNotNull(result);
             assertEquals(1, result.getContent().size());
+        }
+    }
+
+    @Nested
+    @DisplayName("cancelOwnOrder")
+    class CancelOwnOrderTests {
+        @Test
+        @DisplayName("Скасування власного замовлення в статусі PENDING")
+        void cancelOwnOrder_Success() {
+            Order order = new Order();
+            order.setId(1L);
+            order.setUser(testUser);
+            order.setStatus(OrderStatus.PENDING);
+
+            when(securityUtils.getCurrentUser()).thenReturn(testUser);
+            when(orderRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(order));
+
+            orderService.cancelOwnOrder(1L);
+
+            assertEquals(OrderStatus.CANCELLED, order.getStatus());
+            verify(orderRepository).save(order);
+        }
+
+        @Test
+        @DisplayName("Скасування замовлення в термінальному статусі - помилка")
+        void cancelOwnOrder_TerminalStatus_ThrowsException() {
+            Order order = new Order();
+            order.setId(1L);
+            order.setUser(testUser);
+            order.setStatus(OrderStatus.DELIVERED);
+
+            when(securityUtils.getCurrentUser()).thenReturn(testUser);
+            when(orderRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.of(order));
+
+            assertThrows(IllegalStateException.class, () -> orderService.cancelOwnOrder(1L));
+        }
+
+        @Test
+        @DisplayName("Скасування чужого замовлення - помилка")
+        void cancelOwnOrder_OtherUsersOrder_ThrowsException() {
+            when(securityUtils.getCurrentUser()).thenReturn(testUser);
+            when(orderRepository.findByIdAndUserId(1L, 1L)).thenReturn(Optional.empty());
+
+            assertThrows(IllegalArgumentException.class, () -> orderService.cancelOwnOrder(1L));
+        }
+    }
+
+    @Nested
+    @DisplayName("updateOrderStatus")
+    class UpdateOrderStatusTests {
+        @Test
+        @DisplayName("Валідний перехід статусу адміном")
+        void updateOrderStatus_ValidTransition() {
+            Order order = new Order();
+            order.setId(1L);
+            order.setUser(testUser);
+            order.setStatus(OrderStatus.PENDING);
+
+            when(securityUtils.getCurrentUser()).thenReturn(adminUser);
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+            orderService.updateOrderStatus(1L, OrderStatus.PAID, "Payment received");
+
+            assertEquals(OrderStatus.PAID, order.getStatus());
+            verify(orderRepository).save(order);
+        }
+
+        @Test
+        @DisplayName("Невалідний перехід статусу - помилка")
+        void updateOrderStatus_InvalidTransition_ThrowsException() {
+            Order order = new Order();
+            order.setId(1L);
+            order.setUser(testUser);
+            order.setStatus(OrderStatus.PENDING);
+
+            when(securityUtils.getCurrentUser()).thenReturn(adminUser);
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+            assertThrows(IllegalStateException.class,
+                    () -> orderService.updateOrderStatus(1L, OrderStatus.DELIVERED, ""));
+        }
+    }
+
+    @Nested
+    @DisplayName("adminCancelOrder")
+    class AdminCancelOrderTests {
+        @Test
+        @DisplayName("Адмін скасовує замовлення в PAID")
+        void adminCancelOrder_Success() {
+            Order order = new Order();
+            order.setId(1L);
+            order.setUser(testUser);
+            order.setStatus(OrderStatus.PAID);
+
+            when(securityUtils.getCurrentUser()).thenReturn(adminUser);
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+            orderService.adminCancelOrder(1L, "Admin override");
+
+            assertEquals(OrderStatus.CANCELLED, order.getStatus());
+            verify(orderRepository).save(order);
+        }
+
+        @Test
+        @DisplayName("Адмін не може скасувати DELIVERED")
+        void adminCancelOrder_Delivered_ThrowsException() {
+            Order order = new Order();
+            order.setId(1L);
+            order.setUser(testUser);
+            order.setStatus(OrderStatus.DELIVERED);
+
+            when(securityUtils.getCurrentUser()).thenReturn(adminUser);
+            when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+
+            assertThrows(IllegalStateException.class, () -> orderService.adminCancelOrder(1L, ""));
+        }
+    }
+
+    @Nested
+    @DisplayName("getOrderHistory")
+    class GetOrderHistoryTests {
+        @Test
+        @DisplayName("Отримання історії замовлення")
+        void getOrderHistory_Success() {
+            when(orderStatusHistoryRepository.findByOrderIdOrderByCreatedAtAsc(1L))
+                    .thenReturn(List.of());
+
+            List<OrderStatusHistory> result = orderService.getOrderHistory(1L);
+
+            assertNotNull(result);
+        }
+    }
+
+    @Nested
+    @DisplayName("stateMachine")
+    class StateMachineTests {
+        @Test
+        @DisplayName("PENDING може перейти в PAID")
+        void pending_CanTransitionTo_Paid() {
+            assertTrue(OrderStatus.PENDING.canTransitionTo(OrderStatus.PAID));
+        }
+
+        @Test
+        @DisplayName("PENDING може перейти в CANCELLED")
+        void pending_CanTransitionTo_Cancelled() {
+            assertTrue(OrderStatus.PENDING.canTransitionTo(OrderStatus.CANCELLED));
+        }
+
+        @Test
+        @DisplayName("PENDING не може перейти в DELIVERED")
+        void pending_CannotTransitionTo_Delivered() {
+            assertFalse(OrderStatus.PENDING.canTransitionTo(OrderStatus.DELIVERED));
+        }
+
+        @Test
+        @DisplayName("DELIVERED - термінальний статус")
+        void delivered_IsTerminal() {
+            assertTrue(OrderStatus.DELIVERED.isTerminal());
+        }
+
+        @Test
+        @DisplayName("CANCELLED - термінальний статус")
+        void cancelled_IsTerminal() {
+            assertTrue(OrderStatus.CANCELLED.isTerminal());
+        }
+
+        @Test
+        @DisplayName("DELIVERED не може перейти нікуди")
+        void delivered_HasNoTransitions() {
+            assertFalse(OrderStatus.DELIVERED.canTransitionTo(OrderStatus.PENDING));
+            assertFalse(OrderStatus.DELIVERED.canTransitionTo(OrderStatus.CANCELLED));
+            assertFalse(OrderStatus.DELIVERED.canTransitionTo(OrderStatus.PAID));
+        }
+
+        @Test
+        @DisplayName("PENDING є cancelable")
+        void pending_IsCancelable() {
+            assertTrue(OrderStatus.PENDING.isCancelable());
+        }
+
+        @Test
+        @DisplayName("DELIVERED не є cancelable")
+        void delivered_IsNotCancelable() {
+            assertFalse(OrderStatus.DELIVERED.isCancelable());
         }
     }
 }
