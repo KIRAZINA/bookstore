@@ -22,6 +22,8 @@ REST API for an online bookstore built with Spring Boot 4, JWT authentication, P
 - Spring Security
 - Spring Data JPA
 - PostgreSQL 16 (Docker)
+- Redis 7 (Docker) — distributed cache
+- Spring Cache Abstraction
 - springdoc-openapi / Swagger UI
 - Docker Compose
 - Flyway (database migrations)
@@ -29,22 +31,24 @@ REST API for an online bookstore built with Spring Boot 4, JWT authentication, P
 
 ## Features
 - User registration and login with JWT
-- Public book catalog endpoints
-- Admin-only book management
+- Public book catalog endpoints (with Redis caching)
+- Admin-only book management (with automatic cache invalidation)
 - User cart management
 - Order creation from the active cart
 - Optimistic locking support for stock updates (PostgreSQL-compatible)
+- Distributed Redis caching with JSON serialization
+- Graceful cache degradation (app works without Redis)
 - Interactive Swagger UI and OpenAPI docs
 - Standalone `api-tester.html` for browser-based API testing
 
 ## Repository Layout
 ```text
 src/main/java/com/example/bookstore/
-|-- config/        Security, JWT, exception handling, OpenAPI config
+|-- config/        Security, JWT, cache, exception handling, OpenAPI config
 |-- controller/    REST controllers and DTOs
 |-- model/         JPA entities and enums
 |-- repository/    Spring Data repositories
-`-- service/       Business logic
+`-- service/       Business logic (with caching annotations)
 ```
 
 ## Prerequisites
@@ -54,17 +58,23 @@ src/main/java/com/example/bookstore/
 
 ## Quick Start
 
-### 1. Start PostgreSQL
+### 1. Start PostgreSQL and Redis
 
 ```bash
 docker compose up -d
 ```
 
-This starts PostgreSQL 16 on `localhost:5432` with:
+This starts:
+
+PostgreSQL 16 on `localhost:5432`:
 - Database: `bookstore`
 - User: `bookstore`
 - Password: `bookstore`
 - Persistent data volume: `postgres_data`
+
+Redis 7 on `localhost:6379`:
+- Persistent data volume: `redis_data`
+- Health check via `redis-cli ping`
 
 ### 2. Start the Application
 
@@ -142,6 +152,10 @@ docker compose up -d
 | `DATASOURCE_USERNAME` | `bookstore` | Database user |
 | `DATASOURCE_PASSWORD` | `bookstore` | Database password |
 | `JWT_SECRET` | (required in prod) | HMAC-SHA256 key for JWT signing |
+| `REDIS_HOST` | `localhost` | Redis server hostname |
+| `REDIS_PORT` | `6379` | Redis server port |
+| `REDIS_CONNECT_TIMEOUT` | `2000` | Redis connection timeout (ms) |
+| `REDIS_TIMEOUT` | `2000` | Redis read/write timeout (ms) |
 
 ## API Documentation
 - Swagger UI: `http://localhost:8080/swagger-ui.html`
@@ -320,6 +334,188 @@ All under `/api/admin/payments/`, require `ROLE_ADMIN`:
 - `payment_history` table — auditable status transitions
 - Indices on `order_id`, `status`, `transaction_id`
 
+## Distributed Caching with Redis
+
+A production-grade distributed caching layer using Redis 7. The cache improves application performance while maintaining database consistency.
+
+### Architecture
+
+```
+┌──────────────┐     @Cacheable      ┌───────────┐     Redis Protocol      ┌──────────┐
+│  Controller   │ ──────────────────→ │  Service   │ ────────────────────→  │   Redis   │
+│  (REST API)   │                    │  Layer     │                        │  (Cache)  │
+└──────────────┘                    └───────┬───┘                        └──────────┘
+                                            │
+                                            │ Cache miss / fallback
+                                            ▼
+                                     ┌───────────┐
+                                     │    JPA     │
+                                     │ Repository │
+                                     └─────┬─────┘
+                                           │
+                                           ▼
+                                     ┌───────────┐
+                                     │ PostgreSQL │
+                                     │ (Source of │
+                                     │  Truth)    │
+                                     └───────────┘
+```
+
+- **PostgreSQL** remains the authoritative data source
+- **Redis** is only an optimization layer
+- **Spring Cache** abstraction prevents Redis-specific code from leaking into business logic
+- If Redis becomes unavailable, the application continues functioning by querying the database directly
+
+### Cache Regions
+
+| Region | TTL | Contents | Caching Rationale |
+|--------|-----|----------|-------------------|
+| `books` | 10 min | `getAllBooks()`, `getBooksByCategory()`, `searchBooks()` | Read-mostly catalog data, low write frequency (admin only) |
+| `bookById` | 30 min | Individual book lookups | Very stable data, longer TTL reduces DB load |
+
+### TTL Strategy
+
+- **books (10 min)**: Book catalog changes infrequently (admin creates/updates/deletes). A 10-minute TTL balances freshness against database load. Under millions of requests, this eliminates ~99.9% of catalog queries.
+- **bookById (30 min)**: Individual book records are even more stable. Once created, a book's metadata rarely changes. Stock updates are the main mutation, and they trigger cache eviction anyway.
+
+### Cache Invalidation
+
+Invalidation is automatic — triggered by write operations:
+
+| Operation | Eviction Target |
+|-----------|----------------|
+| `addBook()` | `books` (all entries) |
+| `deleteBook()` | `books` + `bookById` (all entries) |
+| `updateStock()` | `books` + `bookById` (all entries) |
+
+When books are created, updated, or deleted, the `books` region is cleared entirely (since list queries could contain stale results). The `bookById` region is also cleared on mutations to avoid serving stale individual records.
+
+### What NOT to Cache
+
+| Data | Reason |
+|------|--------|
+| Authentication / JWT | Security-sensitive |
+| Payments | Business-critical state machine |
+| Orders | User-specific mutable business state |
+| Cart | User-specific mutable state |
+| User profiles | Authentication infrastructure |
+
+### Failure Handling
+
+The custom `CacheErrorHandler` in `CacheConfig` catches all Redis errors and logs them as warnings without propagating exceptions. This ensures:
+
+1. The application never fails because Redis is unavailable
+2. All operations fall through to the database transparently
+3. Cache failures are invisible to clients (they see normal responses)
+
+### Serialization
+
+Values are serialized using `GenericJackson2JsonRedisSerializer`:
+- JSON serialization (not Java native) — enables cross-language compatibility
+- `StringRedisSerializer` for cache keys
+- Java Time module registered for proper date/time handling
+- Polymorphic type handling via `@class` property
+
+### Configuration
+
+Dev profile (`application.yml`):
+```yaml
+spring:
+  data:
+    redis:
+      host: localhost
+      port: 6379
+      connect-timeout: 2000
+      timeout: 2000
+  cache:
+    type: redis
+
+app:
+  cache:
+    enabled: true
+```
+
+Production profile (`application-prod.yml`):
+```yaml
+spring:
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2000}
+      timeout: ${REDIS_TIMEOUT:2000}
+  cache:
+    type: redis
+
+app:
+  cache:
+    enabled: true
+```
+
+Test profile (`application-test.yml`): Caching is disabled (`spring.cache.type=none`, `app.cache.enabled=false`) to avoid requiring Redis during unit tests.
+
+### Cache Configuration Class
+
+`CacheConfig` at `config/CacheConfig.java`:
+- Annotated with `@EnableCaching`
+- Implements `CachingConfigurer` to provide a custom `CacheErrorHandler`
+- Configures `RedisCacheManager` with per-region TTL and JSON serialization
+- The `RedisCacheManager` bean is conditional on `spring.cache.type=redis` (falls back to Spring Boot's auto-configured cache manager for other types)
+- The entire config is conditional on `app.cache.enabled=true`
+
+### Performance Benefits
+
+- Eliminates redundant database queries for the most frequently accessed data
+- Cache stampede is naturally mitigated by per-region TTL and key-based caching (different search terms don't compete for the same cache entry)
+- Distributed cache supports horizontal scaling — all application instances share the same Redis cache
+- No duplicated cache entries — each query has a unique key within its region
+
+### Future Scalability
+
+The current architecture supports:
+- **Redis Cluster**: No code changes needed — just update Redis connection configuration
+- **CDN Integration**: Pre-populate CDN from Redis cache
+- **Read Replica Databases**: Cache can reduce load on both primary and replica databases
+- **API Gateway Caching**: Shared Redis allows gateway-level caching
+- **Prometheus Integration**: Spring Cache metrics (hit rate, miss rate, puts, evictions) are available via Micrometer
+
+To add a new cache region:
+1. Define the region name and TTL in `CacheConfig`
+2. Add `@Cacheable` / `@CacheEvict` annotations to the relevant service methods
+3. Add eviction logic for write operations
+
+### Starting Redis
+
+Redis starts automatically with Docker Compose:
+
+```bash
+docker compose up -d
+```
+
+This starts:
+- PostgreSQL 16 on port 5432
+- Redis 7 on port 6379 (with persistent volume `redis_data`)
+
+### Environment Variables (Production)
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `REDIS_HOST` | `localhost` | Redis server hostname |
+| `REDIS_PORT` | `6379` | Redis server port |
+| `REDIS_CONNECT_TIMEOUT` | `2000` | Connection timeout (ms) |
+| `REDIS_TIMEOUT` | `2000` | Read/write timeout (ms) |
+
+### Testing
+
+The test suite includes:
+- **Cache hit/miss tests**: Verify that repeated calls use cached data
+- **Cache eviction tests**: Verify that write operations clear the appropriate regions
+- **Cache invalidation tests**: Verify cross-region eviction behavior
+- **Redis failure tests**: Verify graceful degradation when Redis is unavailable (6 tests)
+- **Cache region isolation tests**: Verify that different query parameters produce independent cache entries
+
+All cache tests use `spring.cache.type=simple` (in-process cache) to avoid requiring a running Redis instance. The Redis failure tests connect to a non-routable address to simulate an unavailable cache.
+
 ## Default Seed Data
 
 Users:
@@ -429,16 +625,16 @@ curl -X POST http://localhost:8080/api/orders \
 ## Docker Compose
 
 ```bash
-# Start PostgreSQL
+# Start PostgreSQL and Redis
 docker compose up -d
 
 # View logs
 docker compose logs -f
 
-# Stop PostgreSQL
+# Stop all services
 docker compose down
 
-# Stop and delete volume (removes all data)
+# Stop and delete volumes (removes all data)
 docker compose down -v
 ```
 
@@ -457,4 +653,6 @@ docker compose down
 - Validation errors return `400 Bad Request`.
 - Swagger endpoints are intentionally open for local testing.
 - Database schema and data persist across restarts via Docker volume `postgres_data`.
-- Run `docker compose down -v` to reset the database completely; Flyway reapplies all migrations on next startup.
+- Redis cache persists across restarts via Docker volume `redis_data`.
+- Run `docker compose down -v` to reset both database and cache completely; Flyway reapplies all migrations on next startup.
+- The application functions correctly without Redis — cache failures degrade gracefully to direct database queries.

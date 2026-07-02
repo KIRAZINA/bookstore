@@ -2,6 +2,7 @@ package com.example.bookstore.service;
 
 import com.example.bookstore.exception.InvalidPaymentStateException;
 import com.example.bookstore.exception.PaymentException;
+import com.example.bookstore.metrics.BusinessMetrics;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.OrderRepository;
 import com.example.bookstore.repository.PaymentHistoryRepository;
@@ -43,6 +44,9 @@ class PaymentServiceTest {
 
     @Mock
     private ApplicationEventPublisher eventPublisher;
+
+    @Mock
+    private BusinessMetrics businessMetrics;
 
     @InjectMocks
     private PaymentService paymentService;

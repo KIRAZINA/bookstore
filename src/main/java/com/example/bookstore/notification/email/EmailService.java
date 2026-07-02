@@ -1,5 +1,6 @@
 package com.example.bookstore.notification.email;
 
+import com.example.bookstore.metrics.BusinessMetrics;
 import com.example.bookstore.notification.model.EmailLog;
 import com.example.bookstore.notification.model.EmailStatus;
 import com.example.bookstore.notification.repository.EmailLogRepository;
@@ -17,10 +18,13 @@ public class EmailService {
 
     private final EmailSender emailSender;
     private final EmailLogRepository emailLogRepository;
+    private final BusinessMetrics businessMetrics;
 
-    public EmailService(EmailSender emailSender, EmailLogRepository emailLogRepository) {
+    public EmailService(EmailSender emailSender, EmailLogRepository emailLogRepository,
+                        BusinessMetrics businessMetrics) {
         this.emailSender = emailSender;
         this.emailLogRepository = emailLogRepository;
+        this.businessMetrics = businessMetrics;
     }
 
     public void sendEmail(String to, String subject, String body, String emailType) {
@@ -35,6 +39,7 @@ public class EmailService {
                 emailLog.setSentAt(LocalDateTime.now());
                 emailLog.setRetryCount(attempt + 1);
                 emailLogRepository.save(emailLog);
+                businessMetrics.recordEmailSent();
                 return;
             } catch (Exception e) {
                 lastException = e;
@@ -57,6 +62,7 @@ public class EmailService {
         emailLog.setStatus(EmailStatus.FAILED);
         emailLog.setErrorMessage(lastException != null ? lastException.getMessage() : "Unknown error");
         emailLogRepository.save(emailLog);
+        businessMetrics.recordEmailFailed();
         log.error("Failed to send email to {} after {} attempts: {}", to, MAX_RETRIES,
                 lastException != null ? lastException.getMessage() : "Unknown error");
     }

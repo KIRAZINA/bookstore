@@ -2,6 +2,7 @@ package com.example.bookstore.config;
 
 import com.example.bookstore.exception.InvalidPaymentStateException;
 import com.example.bookstore.exception.PaymentException;
+import com.example.bookstore.metrics.BusinessMetrics;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.orm.ObjectOptimisticLockingFailureException;
@@ -14,8 +15,15 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    private final BusinessMetrics businessMetrics;
+
+    public GlobalExceptionHandler(BusinessMetrics businessMetrics) {
+        this.businessMetrics = businessMetrics;
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<Map<String, String>> handleIllegalArgument(IllegalArgumentException ex) {
+        businessMetrics.recordError();
         Map<String, String> error = new HashMap<>();
         error.put("error", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
@@ -23,6 +31,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(IllegalStateException.class)
     public ResponseEntity<Map<String, String>> handleIllegalState(IllegalStateException ex) {
+        businessMetrics.recordError();
         Map<String, String> error = new HashMap<>();
         error.put("error", ex.getMessage());
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(error);
@@ -30,6 +39,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(org.springframework.dao.DataIntegrityViolationException.class)
     public ResponseEntity<Map<String, String>> handleDataIntegrity(org.springframework.dao.DataIntegrityViolationException ex) {
+        businessMetrics.recordError();
         Map<String, String> error = new HashMap<>();
         error.put("error", "Duplicate entry: " + ex.getMostSpecificCause().getMessage());
         return ResponseEntity.status(HttpStatus.CONFLICT).body(error);
@@ -37,6 +47,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(org.springframework.web.bind.MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, String>> handleValidation(org.springframework.web.bind.MethodArgumentNotValidException ex) {
+        businessMetrics.recordError();
         Map<String, String> errors = new HashMap<>();
         ex.getBindingResult().getFieldErrors().forEach(err -> errors.put(err.getField(), err.getDefaultMessage()));
         return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errors);
@@ -44,6 +55,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler({ObjectOptimisticLockingFailureException.class, jakarta.persistence.OptimisticLockException.class})
     public ResponseEntity<Map<String, String>> handleOptimisticLock(Exception ex) {
+        businessMetrics.recordError();
         Map<String, String> error = new HashMap<>();
         error.put("error", "Concurrent modification detected. Please retry.");
         error.put("code", "CONCURRENT_MODIFICATION");
@@ -52,6 +64,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(PaymentException.class)
     public ResponseEntity<Map<String, String>> handlePaymentException(PaymentException ex) {
+        businessMetrics.recordError();
         Map<String, String> error = new HashMap<>();
         error.put("error", ex.getMessage());
         error.put("code", "PAYMENT_ERROR");
@@ -60,6 +73,7 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(InvalidPaymentStateException.class)
     public ResponseEntity<Map<String, String>> handleInvalidPaymentState(InvalidPaymentStateException ex) {
+        businessMetrics.recordError();
         Map<String, String> error = new HashMap<>();
         error.put("error", ex.getMessage());
         error.put("code", "INVALID_PAYMENT_STATE");

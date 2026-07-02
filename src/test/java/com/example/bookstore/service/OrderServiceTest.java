@@ -1,6 +1,7 @@
 package com.example.bookstore.service;
 
 import com.example.bookstore.config.SecurityUtils;
+import com.example.bookstore.metrics.BusinessMetrics;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.BookRepository;
 import com.example.bookstore.repository.OrderRepository;
@@ -55,6 +56,9 @@ class OrderServiceTest {
 
     @Mock
     private SecurityUtils securityUtils;
+
+    @Mock
+    private BusinessMetrics businessMetrics;
 
     @InjectMocks
     private OrderService orderService;

@@ -3,6 +3,7 @@ package com.example.bookstore.service;
 import com.example.bookstore.config.SecurityUtils;
 import com.example.bookstore.event.OrderCreatedEvent;
 import com.example.bookstore.event.OrderStatusChangedEvent;
+import com.example.bookstore.metrics.BusinessMetrics;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.BookRepository;
 import com.example.bookstore.repository.OrderRepository;
@@ -27,6 +28,7 @@ public class OrderService {
     private final DummyPaymentProvider paymentProvider;
     private final ApplicationEventPublisher eventPublisher;
     private final SecurityUtils securityUtils;
+    private final BusinessMetrics businessMetrics;
 
     public OrderService(OrderRepository orderRepository,
                         OrderStatusHistoryRepository orderStatusHistoryRepository,
@@ -35,7 +37,8 @@ public class OrderService {
                         PaymentRepository paymentRepository,
                         DummyPaymentProvider paymentProvider,
                         ApplicationEventPublisher eventPublisher,
-                        SecurityUtils securityUtils) {
+                        SecurityUtils securityUtils,
+                        BusinessMetrics businessMetrics) {
         this.orderRepository = orderRepository;
         this.orderStatusHistoryRepository = orderStatusHistoryRepository;
         this.cartService = cartService;
@@ -44,10 +47,12 @@ public class OrderService {
         this.paymentProvider = paymentProvider;
         this.eventPublisher = eventPublisher;
         this.securityUtils = securityUtils;
+        this.businessMetrics = businessMetrics;
     }
 
     @Transactional
     public Order createOrder() {
+        long start = System.currentTimeMillis();
         AppUser user = securityUtils.getCurrentUser();
         Cart cart = cartService.getCart();
 
@@ -66,11 +71,14 @@ public class OrderService {
         order.setUser(user);
         order.setStatus(OrderStatus.PENDING);
 
+        int totalItems = 0;
         for (CartItem cartItem : cart.getItems()) {
             Book book = cartItem.getBook();
 
             book.setStock(book.getStock() - cartItem.getQuantity());
             bookRepository.save(book);
+
+            totalItems += cartItem.getQuantity();
 
             OrderItem orderItem = new OrderItem();
             orderItem.setBook(book);
@@ -88,6 +96,10 @@ public class OrderService {
         paymentRepository.save(payment);
 
         cartService.clearCart();
+
+        businessMetrics.recordOrderCreated();
+        businessMetrics.recordBooksSold(totalItems);
+        businessMetrics.recordCheckoutDuration(System.currentTimeMillis() - start);
 
         eventPublisher.publishEvent(new OrderCreatedEvent(
                 order.getId(), user.getId(), user.getUsername(), user.getEmail(), order.getTotalPrice()));
@@ -123,6 +135,8 @@ public class OrderService {
         order.recordTransition(OrderStatus.CANCELLED, user.getUsername(), "Cancelled by customer");
         orderRepository.save(order);
 
+        businessMetrics.recordOrderCancelled();
+
         eventPublisher.publishEvent(new OrderStatusChangedEvent(
                 order.getId(), user.getId(), user.getUsername(), user.getEmail(),
                 previousStatus, OrderStatus.CANCELLED));
@@ -156,6 +170,13 @@ public class OrderService {
         order.recordTransition(targetStatus, admin.getUsername(), comment);
         orderRepository.save(order);
 
+        if (targetStatus == OrderStatus.DELIVERED) {
+            businessMetrics.recordOrderCompleted();
+        }
+        if (targetStatus == OrderStatus.CANCELLED) {
+            businessMetrics.recordOrderCancelled();
+        }
+
         eventPublisher.publishEvent(new OrderStatusChangedEvent(
                 order.getId(), order.getUser().getId(), order.getUser().getUsername(), order.getUser().getEmail(),
                 previousStatus, targetStatus));
@@ -174,6 +195,8 @@ public class OrderService {
         OrderStatus previousStatus = order.getStatus();
         order.recordTransition(OrderStatus.CANCELLED, admin.getUsername(), comment);
         orderRepository.save(order);
+
+        businessMetrics.recordOrderCancelled();
 
         eventPublisher.publishEvent(new OrderStatusChangedEvent(
                 order.getId(), order.getUser().getId(), order.getUser().getUsername(), order.getUser().getEmail(),

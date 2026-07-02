@@ -16,6 +16,52 @@ spring:
     baseline-on-migrate: true
     out-of-order: false
 
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2000}
+      timeout: ${REDIS_TIMEOUT:2000}
+
+  cache:
+    type: redis
+
+app:
+  cache:
+    enabled: true
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: when-authorized
+      probes:
+        enabled: true
+    prometheus:
+      access: unrestricted
+  info:
+    env:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+      environment: prod
+    export:
+      prometheus:
+        enabled: true
+
+info:
+  app:
+    name: ${spring.application.name}
+    version: @project.version@
+    java-version: ${java.version}
+
 jwt:
   secret: ${JWT_SECRET}
 

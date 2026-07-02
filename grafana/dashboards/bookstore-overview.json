@@ -1,0 +1,248 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "Bookstore API — Overview",
+  "version": 1,
+  "timezone": "browser",
+  "editable": true,
+  "panels": [
+    {
+      "title": "HTTP Request Rate",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count{application=\"bookstore\"}[1m])",
+          "legendFormat": "{{method}} {{uri}}"
+        }
+      ]
+    },
+    {
+      "title": "HTTP Error Rate (4xx/5xx)",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "rate(http_server_requests_seconds_count{application=\"bookstore\",status=~\"4..|5..\"}[1m])",
+          "legendFormat": "{{status}} {{uri}}"
+        }
+      ]
+    },
+    {
+      "title": "P95 Response Latency",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(http_server_requests_seconds_bucket{application=\"bookstore\"}[1m]))",
+          "legendFormat": "{{method}} {{uri}}"
+        }
+      ]
+    },
+    {
+      "title": "Active Requests",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "http_server_active_requests{application=\"bookstore\"}",
+          "legendFormat": "active"
+        }
+      ]
+    },
+    {
+      "title": "JVM Heap Memory",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{application=\"bookstore\",area=\"heap\"}",
+          "legendFormat": "{{id}}"
+        }
+      ]
+    },
+    {
+      "title": "JVM Non-Heap Memory",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{application=\"bookstore\",area=\"nonheap\"}",
+          "legendFormat": "{{id}}"
+        }
+      ]
+    },
+    {
+      "title": "GC Pause Duration",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "rate(jvm_gc_pause_seconds_sum{application=\"bookstore\"}[1m])",
+          "legendFormat": "{{cause}}"
+        }
+      ]
+    },
+    {
+      "title": "CPU Usage",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "system_cpu_usage{application=\"bookstore\"}",
+          "legendFormat": "system"
+        },
+        {
+          "expr": "process_cpu_usage{application=\"bookstore\"}",
+          "legendFormat": "process"
+        }
+      ]
+    },
+    {
+      "title": "Thread Pool",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "jvm_threads_live_threads{application=\"bookstore\"}",
+          "legendFormat": "live"
+        },
+        {
+          "expr": "jvm_threads_daemon_threads{application=\"bookstore\"}",
+          "legendFormat": "daemon"
+        }
+      ]
+    },
+    {
+      "title": "Database Connection Pool",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "hikaricp_connections_active{application=\"bookstore\"}",
+          "legendFormat": "active"
+        },
+        {
+          "expr": "hikaricp_connections_idle{application=\"bookstore\"}",
+          "legendFormat": "idle"
+        },
+        {
+          "expr": "hikaricp_connections_pending{application=\"bookstore\"}",
+          "legendFormat": "pending"
+        }
+      ]
+    },
+    {
+      "title": "Business: Orders",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "rate(bookstore_orders_created[1m])",
+          "legendFormat": "created"
+        },
+        {
+          "expr": "rate(bookstore_orders_completed[1m])",
+          "legendFormat": "completed"
+        },
+        {
+          "expr": "rate(bookstore_orders_cancelled[1m])",
+          "legendFormat": "cancelled"
+        }
+      ]
+    },
+    {
+      "title": "Business: Payments",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "rate(bookstore_payments_processed[1m])",
+          "legendFormat": "processed"
+        },
+        {
+          "expr": "rate(bookstore_payments_completed[1m])",
+          "legendFormat": "completed"
+        },
+        {
+          "expr": "rate(bookstore_payments_failed[1m])",
+          "legendFormat": "failed"
+        }
+      ]
+    },
+    {
+      "title": "Business: Books Sold Rate",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "rate(bookstore_books_sold[1m])",
+          "legendFormat": "books sold"
+        }
+      ]
+    },
+    {
+      "title": "Business: Checkout Duration (P95)",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "rate(bookstore_checkout_duration_seconds_sum[1m]) / rate(bookstore_checkout_duration_seconds_count[1m])",
+          "legendFormat": "avg duration"
+        }
+      ]
+    },
+    {
+      "title": "Business: Emails",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "rate(bookstore_emails_sent[1m])",
+          "legendFormat": "sent"
+        },
+        {
+          "expr": "rate(bookstore_emails_failed[1m])",
+          "legendFormat": "failed"
+        }
+      ]
+    },
+    {
+      "title": "Application Error Rate",
+      "type": "graph",
+      "span": 6,
+      "targets": [
+        {
+          "expr": "rate(bookstore_errors_total[1m])",
+          "legendFormat": "errors"
+        }
+      ]
+    },
+    {
+      "title": "Application Uptime",
+      "type": "stat",
+      "span": 4,
+      "targets": [
+        {
+          "expr": "process_uptime_seconds{application=\"bookstore\"}"
+        }
+      ]
+    },
+    {
+      "title": "Cache Metrics",
+      "type": "graph",
+      "span": 8,
+      "targets": [
+        {
+          "expr": "rate(bookstore_cache_hits[1m])",
+          "legendFormat": "hits"
+        },
+        {
+          "expr": "rate(bookstore_cache_misses[1m])",
+          "legendFormat": "misses"
+        }
+      ]
+    }
+  ],
+  "schemaVersion": 6
+}

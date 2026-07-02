@@ -2,6 +2,7 @@ package com.example.bookstore.controller;
 
 import com.example.bookstore.config.GlobalExceptionHandler;
 import com.example.bookstore.config.jwt.JwtUtil;
+import com.example.bookstore.metrics.BusinessMetrics;
 import com.example.bookstore.service.OrderService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -35,6 +36,9 @@ class OrderControllerTest {
 
     @MockitoBean
     private UserDetailsService userDetailsService;
+
+    @MockitoBean
+    private BusinessMetrics businessMetrics;
 
     @Test
     @DisplayName("POST /api/orders returns 409 on optimistic lock conflict")

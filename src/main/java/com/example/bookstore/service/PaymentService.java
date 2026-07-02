@@ -5,6 +5,7 @@ import com.example.bookstore.event.PaymentFailedEvent;
 import com.example.bookstore.event.PaymentRefundedEvent;
 import com.example.bookstore.exception.InvalidPaymentStateException;
 import com.example.bookstore.exception.PaymentException;
+import com.example.bookstore.metrics.BusinessMetrics;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.*;
 import com.example.bookstore.service.payment.DummyPaymentProvider;
@@ -25,17 +26,20 @@ public class PaymentService {
     private final OrderRepository orderRepository;
     private final PaymentProvider paymentProvider;
     private final ApplicationEventPublisher eventPublisher;
+    private final BusinessMetrics businessMetrics;
 
     public PaymentService(PaymentRepository paymentRepository,
                           PaymentHistoryRepository paymentHistoryRepository,
                           OrderRepository orderRepository,
                           DummyPaymentProvider paymentProvider,
-                          ApplicationEventPublisher eventPublisher) {
+                          ApplicationEventPublisher eventPublisher,
+                          BusinessMetrics businessMetrics) {
         this.paymentRepository = paymentRepository;
         this.paymentHistoryRepository = paymentHistoryRepository;
         this.orderRepository = orderRepository;
         this.paymentProvider = paymentProvider;
         this.eventPublisher = eventPublisher;
+        this.businessMetrics = businessMetrics;
     }
 
     @Transactional
@@ -69,6 +73,7 @@ public class PaymentService {
         payment.recordTransition(PaymentStatus.PROCESSING, "system", "Processing payment");
         payment.setUpdatedAt(LocalDateTime.now());
 
+        businessMetrics.recordPaymentProcessed();
         PaymentProviderResponse providerResponse = paymentProvider.processPayment(payment);
         AppUser user = order.getUser();
 
@@ -80,12 +85,16 @@ public class PaymentService {
             order.recordTransition(OrderStatus.PAID, "system", "Payment completed via " + paymentProvider.getName());
             orderRepository.save(order);
 
+            businessMetrics.recordPaymentCompleted();
+
             eventPublisher.publishEvent(new PaymentCompletedEvent(
                     payment.getId(), order.getId(), user.getId(), user.getUsername(), user.getEmail(),
                     payment.getAmount(), payment.getTransactionId()));
         } else {
             payment.setFailureReason(providerResponse.getFailureReason());
             payment.recordTransition(PaymentStatus.FAILED, "system", providerResponse.getFailureReason());
+
+            businessMetrics.recordPaymentFailed();
 
             eventPublisher.publishEvent(new PaymentFailedEvent(
                     payment.getId(), order.getId(), user.getId(), user.getUsername(), user.getEmail(),
@@ -125,6 +134,8 @@ public class PaymentService {
         if (providerResponse.isSuccess()) {
             payment.setTransactionId(providerResponse.getTransactionId());
             payment.recordTransition(PaymentStatus.REFUNDED, "system", "Payment refunded");
+
+            businessMetrics.recordPaymentRefunded();
 
             eventPublisher.publishEvent(new PaymentRefundedEvent(
                     payment.getId(), payment.getOrder().getId(), user.getId(), user.getUsername(), user.getEmail(),
