@@ -6,6 +6,7 @@ import com.example.bookstore.controller.dto.UpdateOrderStatusRequest;
 import com.example.bookstore.model.Order;
 import com.example.bookstore.model.OrderStatus;
 import com.example.bookstore.model.OrderStatusHistory;
+import com.example.bookstore.service.AuditService;
 import com.example.bookstore.service.OrderService;
 import jakarta.validation.Valid;
 import org.springframework.data.domain.Page;
@@ -22,9 +23,11 @@ import java.util.stream.Collectors;
 public class AdminController {
 
     private final OrderService orderService;
+    private final AuditService auditService;
 
-    public AdminController(OrderService orderService) {
+    public AdminController(OrderService orderService, AuditService auditService) {
         this.orderService = orderService;
+        this.auditService = auditService;
     }
 
     @GetMapping
@@ -49,6 +52,8 @@ public class AdminController {
             @PathVariable Long id,
             @Valid @RequestBody UpdateOrderStatusRequest request) {
         orderService.updateOrderStatus(id, request.getStatus(), request.getComment());
+        auditService.logAdminAction("UPDATE_ORDER_STATUS",
+                "orderId=" + id + " newStatus=" + request.getStatus());
         return ResponseEntity.ok(toOrderResponse(orderService.getOrderById(id)));
     }
 
@@ -58,6 +63,8 @@ public class AdminController {
             @RequestBody(required = false) UpdateOrderStatusRequest request) {
         String comment = request != null ? request.getComment() : null;
         orderService.adminCancelOrder(id, comment);
+        auditService.logAdminAction("CANCEL_ORDER",
+                "orderId=" + id + " comment=" + comment);
         return ResponseEntity.ok(toOrderResponse(orderService.getOrderById(id)));
     }
 

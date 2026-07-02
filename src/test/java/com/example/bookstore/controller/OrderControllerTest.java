@@ -48,7 +48,7 @@ class OrderControllerTest {
 
         mockMvc.perform(post("/api/orders"))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.error").value("Concurrent modification detected. Please retry."))
+                .andExpect(jsonPath("$.message").value("Concurrent modification detected. Please retry."))
                 .andExpect(jsonPath("$.code").value("CONCURRENT_MODIFICATION"));
     }
 

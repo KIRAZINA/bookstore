@@ -1,22 +1,27 @@
 package com.example.bookstore.service;
 
+import com.example.bookstore.event.EventTypes;
 import com.example.bookstore.event.PaymentCompletedEvent;
 import com.example.bookstore.event.PaymentFailedEvent;
 import com.example.bookstore.event.PaymentRefundedEvent;
+import com.example.bookstore.event.publisher.DomainEventPublisher;
 import com.example.bookstore.exception.InvalidPaymentStateException;
 import com.example.bookstore.exception.PaymentException;
 import com.example.bookstore.metrics.BusinessMetrics;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.*;
+import com.example.bookstore.model.OrderItem;
 import com.example.bookstore.service.payment.DummyPaymentProvider;
 import com.example.bookstore.service.payment.PaymentProvider;
 import com.example.bookstore.service.payment.PaymentProviderResponse;
-import org.springframework.context.ApplicationEventPublisher;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 @Service
 public class PaymentService {
@@ -25,21 +30,32 @@ public class PaymentService {
     private final PaymentHistoryRepository paymentHistoryRepository;
     private final OrderRepository orderRepository;
     private final PaymentProvider paymentProvider;
-    private final ApplicationEventPublisher eventPublisher;
+    private final DomainEventPublisher domainEventPublisher;
     private final BusinessMetrics businessMetrics;
+    private final InventoryService inventoryService;
 
     public PaymentService(PaymentRepository paymentRepository,
                           PaymentHistoryRepository paymentHistoryRepository,
                           OrderRepository orderRepository,
                           DummyPaymentProvider paymentProvider,
-                          ApplicationEventPublisher eventPublisher,
-                          BusinessMetrics businessMetrics) {
+                          DomainEventPublisher domainEventPublisher,
+                          BusinessMetrics businessMetrics,
+                          InventoryService inventoryService) {
         this.paymentRepository = paymentRepository;
         this.paymentHistoryRepository = paymentHistoryRepository;
         this.orderRepository = orderRepository;
         this.paymentProvider = paymentProvider;
-        this.eventPublisher = eventPublisher;
+        this.domainEventPublisher = domainEventPublisher;
         this.businessMetrics = businessMetrics;
+        this.inventoryService = inventoryService;
+    }
+
+    private Map<Long, Integer> getOrderItemQuantities(Order order) {
+        Map<Long, Integer> items = new LinkedHashMap<>();
+        for (OrderItem item : order.getItems()) {
+            items.put(item.getBook().getId(), item.getQuantity());
+        }
+        return items;
     }
 
     @Transactional
@@ -59,6 +75,7 @@ public class PaymentService {
                 .orElseThrow(() -> new PaymentException("Payment not found: " + paymentId));
     }
 
+    @WithSpan("PaymentService.processPayment")
     @Transactional
     public Payment processPayment(Long orderId, String paymentMethod) {
         Payment payment = getPaymentByOrderId(orderId);
@@ -85,20 +102,29 @@ public class PaymentService {
             order.recordTransition(OrderStatus.PAID, "system", "Payment completed via " + paymentProvider.getName());
             orderRepository.save(order);
 
+            inventoryService.finalizeAllReservationsForOrder(
+                    getOrderItemQuantities(order), order.getId());
+
             businessMetrics.recordPaymentCompleted();
 
-            eventPublisher.publishEvent(new PaymentCompletedEvent(
-                    payment.getId(), order.getId(), user.getId(), user.getUsername(), user.getEmail(),
-                    payment.getAmount(), payment.getTransactionId()));
+            domainEventPublisher.publish(
+                    new PaymentCompletedEvent(payment.getId(), order.getId(), user.getId(), user.getUsername(),
+                            user.getEmail(), payment.getAmount(), payment.getTransactionId()),
+                    EventTypes.AGGREGATE_PAYMENT, String.valueOf(payment.getId()), EventTypes.PAYMENT_COMPLETED);
         } else {
             payment.setFailureReason(providerResponse.getFailureReason());
             payment.recordTransition(PaymentStatus.FAILED, "system", providerResponse.getFailureReason());
 
+            inventoryService.releaseAllReservationsForOrder(
+                    getOrderItemQuantities(order), order.getId(),
+                    "Payment failed: " + providerResponse.getFailureReason(), "system");
+
             businessMetrics.recordPaymentFailed();
 
-            eventPublisher.publishEvent(new PaymentFailedEvent(
-                    payment.getId(), order.getId(), user.getId(), user.getUsername(), user.getEmail(),
-                    payment.getAmount(), providerResponse.getFailureReason()));
+            domainEventPublisher.publish(
+                    new PaymentFailedEvent(payment.getId(), order.getId(), user.getId(), user.getUsername(),
+                            user.getEmail(), payment.getAmount(), providerResponse.getFailureReason()),
+                    EventTypes.AGGREGATE_PAYMENT, String.valueOf(payment.getId()), EventTypes.PAYMENT_FAILED);
         }
 
         payment.setUpdatedAt(LocalDateTime.now());
@@ -119,6 +145,7 @@ public class PaymentService {
         return paymentRepository.save(payment);
     }
 
+    @WithSpan("PaymentService.refundPayment")
     @Transactional
     public Payment refundPayment(Long paymentId) {
         Payment payment = getPaymentById(paymentId);
@@ -135,11 +162,16 @@ public class PaymentService {
             payment.setTransactionId(providerResponse.getTransactionId());
             payment.recordTransition(PaymentStatus.REFUNDED, "system", "Payment refunded");
 
+            inventoryService.restoreAllStockForOrder(
+                    getOrderItemQuantities(payment.getOrder()), payment.getOrder().getId(),
+                    "Stock restored after refund", "system");
+
             businessMetrics.recordPaymentRefunded();
 
-            eventPublisher.publishEvent(new PaymentRefundedEvent(
-                    payment.getId(), payment.getOrder().getId(), user.getId(), user.getUsername(), user.getEmail(),
-                    payment.getAmount(), payment.getTransactionId()));
+            domainEventPublisher.publish(
+                    new PaymentRefundedEvent(payment.getId(), payment.getOrder().getId(), user.getId(), user.getUsername(),
+                            user.getEmail(), payment.getAmount(), payment.getTransactionId()),
+                    EventTypes.AGGREGATE_PAYMENT, String.valueOf(payment.getId()), EventTypes.PAYMENT_REFUNDED);
         } else {
             payment.setFailureReason(providerResponse.getFailureReason());
             payment.recordTransition(PaymentStatus.FAILED, "system", "Refund failed: " + providerResponse.getFailureReason());

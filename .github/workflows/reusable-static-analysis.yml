@@ -1,0 +1,60 @@
+name: Static Analysis
+
+on:
+  workflow_call:
+
+jobs:
+  static-analysis:
+    name: Static Code Analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: ./.github/actions/java-setup
+
+      - name: Compile Project
+        run: ./mvnw clean compile -Pci --no-transfer-progress
+
+      - name: Checkstyle Validation
+        run: |
+          ./mvnw checkstyle:check \
+            -Pci \
+            --no-transfer-progress
+
+      - name: PMD Analysis
+        run: |
+          ./mvnw pmd:check pmd:cpd-check \
+            -Pci \
+            --no-transfer-progress
+
+      - name: SpotBugs Analysis
+        run: |
+          ./mvnw spotbugs:check \
+            -Pci \
+            --no-transfer-progress
+
+      - name: Upload Checkstyle Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: checkstyle-report
+          path: target/checkstyle*
+          retention-days: 14
+
+      - name: Upload PMD Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmd-report
+          path: target/pmd*
+          retention-days: 14
+
+      - name: Upload SpotBugs Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: spotbugs-report
+          path: target/spotbugs*
+          retention-days: 14

@@ -1,0 +1,85 @@
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: bookstore-hpa
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/name: bookstore
+    app.kubernetes.io/component: api
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: bookstore
+  # === Scaling Limits ===
+  # Minimum: 3 replicas for high availability across 3 AZs
+  # Maximum: 20 replicas for traffic spikes
+  minReplicas: 3
+  maxReplicas: 20
+
+  # === Scaling Behavior ===
+  # Stable window prevents flapping during transient spikes
+  # Scale-down is more conservative than scale-up
+  behavior:
+    scaleDown:
+      # Wait 5 minutes of sustained low metrics before scaling down
+      stabilizationWindowSeconds: 300
+      policies:
+        # Remove at most 1 pod per 60 seconds during scale-down
+        - type: Pods
+          value: 1
+          periodSeconds: 60
+        # Remove at most 25% of pods per 60 seconds (whichever is more restrictive)
+        - type: Percent
+          value: 25
+          periodSeconds: 60
+      # Select the policy that results in fewer pods removed (conservative)
+      selectPolicy: Min
+    scaleUp:
+      # Wait 1 minute of sustained high metrics before scaling up
+      stabilizationWindowSeconds: 60
+      policies:
+        # Add at most 4 pods per 60 seconds
+        - type: Pods
+          value: 4
+          periodSeconds: 60
+        # Add at most 100% of current pods per 60 seconds (doubling)
+        - type: Percent
+          value: 100
+          periodSeconds: 60
+      # Select the policy that adds more pods faster (aggressive scale-up)
+      selectPolicy: Max
+
+  # === Scaling Metrics ===
+  metrics:
+    # === CPU Utilization ===
+    # Target: 70% average CPU utilization across all pods
+    # Below 70%: scale down; Above 70%: scale up
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+
+    # === Memory Utilization ===
+    # Target: 80% average memory utilization
+    # Memory-based scaling catches OOM-prone scenarios
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 80
+
+    # === HTTP Requests per Second ===
+    # Target: 1000 requests per second per pod
+    # This is the most business-relevant metric for an API service
+    # Requires Prometheus Adapter or custom metrics API
+    # - type: Pods
+    #   pods:
+    #     metric:
+    #       name: http_requests_per_second
+    #     target:
+    #       type: AverageValue
+    #       averageValue: "1000"

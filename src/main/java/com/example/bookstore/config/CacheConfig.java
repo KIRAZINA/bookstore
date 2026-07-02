@@ -14,6 +14,7 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.annotation.CachingConfigurer;
 import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.interceptor.CacheErrorHandler;
+import org.springframework.retry.annotation.EnableRetry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.data.redis.cache.RedisCacheConfiguration;
@@ -29,6 +30,7 @@ import java.util.Map;
 
 @Configuration
 @EnableCaching
+@EnableRetry
 @ConditionalOnProperty(name = "app.cache.enabled", havingValue = "true", matchIfMissing = true)
 public class CacheConfig implements CachingConfigurer {
 
@@ -36,12 +38,16 @@ public class CacheConfig implements CachingConfigurer {
 
     public static final String BOOKS = "books";
     public static final String BOOK_BY_ID = "bookById";
+    public static final String INVENTORY = "inventory";
+    public static final String INVENTORY_AVAILABLE = "inventoryAvailable";
 
     @Bean
     @ConditionalOnProperty(name = "spring.cache.type", havingValue = "redis", matchIfMissing = true)
     public RedisCacheManager cacheManager(RedisConnectionFactory connectionFactory) {
         PolymorphicTypeValidator ptv = BasicPolymorphicTypeValidator.builder()
-                .allowIfSubType(Object.class)
+                .allowIfSubType("com.example.bookstore.model.")
+                .allowIfSubType("java.util.")
+                .allowIfSubType("java.time.")
                 .build();
 
         ObjectMapper mapper = new ObjectMapper();
@@ -70,6 +76,18 @@ public class CacheConfig implements CachingConfigurer {
                 .serializeKeysWith(keySerialization)
                 .serializeValuesWith(valueSerialization)
                 .entryTtl(Duration.ofMinutes(30))
+                .disableCachingNullValues());
+
+        cacheConfigurations.put(INVENTORY, RedisCacheConfiguration.defaultCacheConfig()
+                .serializeKeysWith(keySerialization)
+                .serializeValuesWith(valueSerialization)
+                .entryTtl(Duration.ofMinutes(1))
+                .disableCachingNullValues());
+
+        cacheConfigurations.put(INVENTORY_AVAILABLE, RedisCacheConfiguration.defaultCacheConfig()
+                .serializeKeysWith(keySerialization)
+                .serializeValuesWith(valueSerialization)
+                .entryTtl(Duration.ofSeconds(30))
                 .disableCachingNullValues());
 
         RedisCacheConfiguration defaultConfig = RedisCacheConfiguration.defaultCacheConfig()

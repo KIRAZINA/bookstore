@@ -1,0 +1,38 @@
+name: Security Scan
+
+on:
+  workflow_call:
+    secrets:
+      NVD_API_KEY:
+        description: 'NVD API Key for OWASP Dependency Check'
+        required: false
+
+jobs:
+  security-scan:
+    name: Dependency Security Scan
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: ./.github/actions/java-setup
+
+      - name: OWASP Dependency Check
+        run: |
+          ./mvnw dependency-check:check \
+            -Pci \
+            -DfailBuildOnCVSS=7 \
+            --no-transfer-progress
+        env:
+          NVD_API_KEY: ${{ secrets.NVD_API_KEY }}
+
+      - name: Upload OWASP Dependency Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: owasp-dependency-report
+          path: |
+            target/dependency-check-report.html
+            target/dependency-check-report.json
+          retention-days: 30

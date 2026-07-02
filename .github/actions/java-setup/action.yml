@@ -1,0 +1,20 @@
+name: 'Setup Java 21'
+description: 'Setup JDK 21 with Temurin distribution and configure Maven caching'
+runs:
+  using: 'composite'
+  steps:
+    - name: Setup JDK 21
+      uses: actions/setup-java@v4
+      with:
+        java-version: '21'
+        distribution: 'temurin'
+        cache: 'maven'
+        cache-dependency-path: 'pom.xml'
+    - name: Make Maven Wrapper Executable
+      shell: bash
+      run: chmod +x ./mvnw
+    - name: Verify Java and Maven
+      shell: bash
+      run: |
+        java -version
+        ./mvnw --version

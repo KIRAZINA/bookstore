@@ -10,7 +10,7 @@ import com.example.bookstore.repository.PaymentRepository;
 import com.example.bookstore.service.payment.DummyPaymentProvider;
 import com.example.bookstore.service.payment.PaymentProviderResponse;
 import org.junit.jupiter.api.BeforeEach;
-import org.springframework.context.ApplicationEventPublisher;
+import com.example.bookstore.event.publisher.DomainEventPublisher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -43,10 +43,13 @@ class PaymentServiceTest {
     private DummyPaymentProvider paymentProvider;
 
     @Mock
-    private ApplicationEventPublisher eventPublisher;
+    private DomainEventPublisher domainEventPublisher;
 
     @Mock
     private BusinessMetrics businessMetrics;
+
+    @Mock
+    private InventoryService inventoryService;
 
     @InjectMocks
     private PaymentService paymentService;

@@ -1,0 +1,78 @@
+name: Build and Test
+
+on:
+  workflow_call:
+    inputs:
+      java-version:
+        description: 'Java version to use'
+        required: false
+        type: string
+        default: '21'
+      maven-goal:
+        description: 'Maven goal to execute'
+        required: false
+        type: string
+        default: 'verify'
+    secrets:
+      NVD_API_KEY:
+        required: false
+
+jobs:
+  build-and-test:
+    name: Build & Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: ./.github/actions/java-setup
+
+      - name: Build and Run All Tests
+        run: |
+          ./mvnw clean ${{ inputs.maven-goal }} \
+            -Pci \
+            -Dspring.profiles.active=test \
+            -T 1C \
+            --no-transfer-progress
+
+      - name: Generate JaCoCo Coverage Report
+        if: always()
+        run: |
+          ./mvnw jacoco:report jacoco:check \
+            -Pci \
+            --no-transfer-progress
+
+      - name: Upload Application JAR
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-jar
+          path: target/*.jar
+          retention-days: 7
+
+      - name: Upload JaCoCo Coverage Report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: target/site/jacoco/
+          retention-days: 14
+
+      - name: Upload Test Reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-reports
+          path: |
+            target/surefire-reports/
+            target/failsafe-reports/
+          retention-days: 14
+
+      - name: Upload Maven Build Log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: maven-build-log
+          path: target/*.log
+          retention-days: 7

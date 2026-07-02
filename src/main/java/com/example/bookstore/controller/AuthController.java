@@ -6,6 +6,7 @@ import com.example.bookstore.controller.dto.LoginResponse;
 import com.example.bookstore.controller.dto.RegisterRequest;
 import com.example.bookstore.controller.dto.RegisterResponse;
 import com.example.bookstore.model.AppUser;
+import com.example.bookstore.service.AuditService;
 import com.example.bookstore.service.UserService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -25,11 +26,14 @@ public class AuthController {
     private final UserService userService;
     private final AuthenticationManager authenticationManager;
     private final JwtUtil jwtUtil;
+    private final AuditService auditService;
 
-    public AuthController(UserService userService, AuthenticationManager authenticationManager, JwtUtil jwtUtil) {
+    public AuthController(UserService userService, AuthenticationManager authenticationManager,
+                          JwtUtil jwtUtil, AuditService auditService) {
         this.userService = userService;
         this.authenticationManager = authenticationManager;
         this.jwtUtil = jwtUtil;
+        this.auditService = auditService;
     }
 
     @PostMapping("/register")
@@ -40,6 +44,8 @@ public class AuthController {
         user.setPassword(request.getPassword());
         user.setEmail(request.getEmail());
         AppUser saved = userService.registerUser(user);
+
+        auditService.logRegistration(request.getUsername());
 
         RegisterResponse response = new RegisterResponse(
             saved.getId(),
@@ -62,6 +68,8 @@ public class AuthController {
             String token = jwtUtil.generateToken(authentication);
             AppUser user = userService.findByUsername(request.getUsername()).orElseThrow();
 
+            auditService.logAuthenticationSuccess(request.getUsername());
+
             LoginResponse response = new LoginResponse(
                 token,
                 user.getId(),
@@ -72,16 +80,17 @@ public class AuthController {
             );
             return ResponseEntity.ok(response);
         } catch (BadCredentialsException e) {
+            auditService.logAuthenticationFailure(request.getUsername());
             return ResponseEntity.status(401).body("Invalid credentials");
         }
     }
 
     @GetMapping("/me")
-    public ResponseEntity<RegisterResponse> getCurrentUser(@org.springframework.security.core.annotation.AuthenticationPrincipal org.springframework.security.core.userdetails.UserDetails userDetails) {
-        if (userDetails == null) {
+    public ResponseEntity<RegisterResponse> getCurrentUser(@org.springframework.security.core.annotation.AuthenticationPrincipal String username) {
+        if (username == null) {
             return ResponseEntity.status(401).build();
         }
-        AppUser user = userService.findByUsername(userDetails.getUsername()).orElseThrow();
+        AppUser user = userService.findByUsername(username).orElseThrow();
         return ResponseEntity.ok(new RegisterResponse(
             user.getId(),
             user.getUsername(),

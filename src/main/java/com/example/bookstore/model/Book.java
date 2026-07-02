@@ -11,7 +11,6 @@ import jakarta.persistence.Version;
 import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.PositiveOrZero;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.Setter;
@@ -43,8 +42,8 @@ public class Book {
 
     private String category;
 
+    @Deprecated
     @Column(nullable = false)
-    @PositiveOrZero(message = "Stock cannot be negative")
     private int stock;
 
     @Version

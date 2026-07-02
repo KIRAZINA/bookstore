@@ -1,0 +1,17 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: bookstore-pdb
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/name: bookstore
+    app.kubernetes.io/component: api
+spec:
+  # Ensure at least 2 pods are always available during voluntary disruptions
+  # (node maintenance, cluster upgrades, etc.)
+  # With a minimum of 3 replicas, this allows at most 1 pod to be disrupted
+  minAvailable: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: bookstore
+      app.kubernetes.io/component: api

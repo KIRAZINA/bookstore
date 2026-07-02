@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: bookstore-config
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/name: bookstore
+    app.kubernetes.io/component: api
+data:
+  # === Spring Boot Configuration ===
+  # Profile is set to prod for Kubernetes deployments
+  SPRING_PROFILES_ACTIVE: "prod"
+
+  # === Actuator Management ===
+  MANAGEMENT_SERVER_PORT: "8081"
+
+  # === Cache ===
+  APP_CACHE_ENABLED: "true"
+
+  # === Rate Limiting ===
+  APP_RATE_LIMITING_ENABLED: "true"
+
+  # === CORS ===
+  # Override via environment-specific ConfigMap overlays
+  CORS_ALLOWED_ORIGINS: "https://bookstore.example.com"
+
+  # === Database Connection Pool ===
+  DB_POOL_MAX_SIZE: "20"
+  DB_POOL_MIN_IDLE: "5"
+
+  # === Redis ===
+  REDIS_SSL_ENABLED: "true"
+  REDIS_CONNECT_TIMEOUT: "5000"
+  REDIS_TIMEOUT: "5000"
+
+  # === JWT ===
+  JWT_EXPIRATION: "1800000"
+  JWT_CLOCK_SKEW_SECONDS: "30"
+
+  # === OpenTelemetry ===
+  OTEL_SERVICE_NAME: "bookstore-api"
+  OTEL_TRACES_EXPORTER: "otlp"
+  OTEL_METRICS_EXPORTER: "otlp"
+  OTEL_LOGS_EXPORTER: "none"
+  OTEL_EXPORTER_OTLP_PROTOCOL: "grpc"
+  OTEL_TRACES_SAMPLER: "parentbased_traceidratio"
+  OTEL_TRACES_SAMPLER_ARG: "0.1"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://bookstore-tempo:4317"
+  OTEL_JAVA_GLOBAL_AUTOCONFIGURE_ENABLED: "true"
+  OTEL_INSTRUMENTATION_LOGBACK_APPENDER_EXPERIMENTAL_LOG_ATTRIBUTES: "true"
+  OTEL_METRIC_EXPORT_INTERVAL: "10000"
+
+  # === Kafka ===
+  # Production Kafka is managed externally (AWS MSK / Confluent Cloud)
+  # The scheduler and consumers should be tuned for production
+  SPRING_KAFKA_PRODUCER_COMPRESSION_TYPE: "snappy"
+  SPRING_KAFKA_PRODUCER_ACKS: "all"
+  SPRING_KAFKA_PRODUCER_RETRIES: "3"
+  SPRING_KAFKA_PRODUCER_ENABLE_IDEMPOTENCE: "true"
+  SPRING_KAFKA_CONSUMER_AUTO_OFFSET_RESET: "earliest"
+  SPRING_KAFKA_CONSUMER_ENABLE_AUTO_COMMIT: "false"
+  SPRING_KAFKA_CONSUMER_MAX_POLL_RECORDS: "100"
+  SPRING_KAFKA_LISTENER_CONCURRENCY: "3"
+  SPRING_KAFKA_LISTENER_MISSING_TOPICS_FATAL: "false"
+
+  # === Outbox ===
+  APP_OUTBOX_POLL_INTERVAL: "1000"
+  APP_OUTBOX_MAX_RETRIES: "5"
+  APP_OUTBOX_BATCH_SIZE: "100"
+
+  # === Inventory Thresholds ===
+  APP_INVENTORY_THRESHOLDS_LOW: "10"
+  APP_INVENTORY_THRESHOLDS_CRITICAL: "3"
+  APP_INVENTORY_CACHE_TTL_SECONDS: "60"

@@ -26,6 +26,12 @@ class BookServiceTest {
     @Mock
     private BookRepository bookRepository;
 
+    @Mock
+    private InventoryService inventoryService;
+
+    @Mock
+    private InventoryAdminService inventoryAdminService;
+
     @InjectMocks
     private BookService bookService;
 

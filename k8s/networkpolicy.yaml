@@ -1,0 +1,205 @@
+# ============================================================
+# Network Policies — Least Privilege Communication
+# ============================================================
+# These policies implement zero-trust networking by default:
+# - All ingress/egress is denied unless explicitly allowed
+# - Application pods can only communicate with required services
+# - Monitoring components have restricted access
+
+---
+# Default deny-all ingress policy for bookstore namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-ingress
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/part-of: bookstore-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Ingress
+---
+# Default deny-all egress policy for bookstore namespace
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-egress
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/part-of: bookstore-platform
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+---
+# Allow ingress to bookstore API from ingress controller
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-ingress-to-bookstore
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/name: bookstore
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bookstore
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Ingress
+  ingress:
+    # Ingress controller access to application port
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: ingress-nginx
+      ports:
+        - port: 8080
+          protocol: TCP
+    # Prometheus access to management port
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: prometheus
+      ports:
+        - port: 8081
+          protocol: TCP
+    # Kubelet health probes
+    - ports:
+        - port: 8081
+          protocol: TCP
+---
+# Allow egress from bookstore API to external services
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-egress-from-bookstore
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/name: bookstore
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bookstore
+      app.kubernetes.io/component: api
+  policyTypes:
+    - Egress
+  egress:
+    # DNS resolution (required for all outbound connections)
+    - to:
+        - namespaceSelector: {}
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+    # PostgreSQL (managed, external)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 5432
+          protocol: TCP
+    # Redis (managed, external)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 6379
+          protocol: TCP
+    # Kafka (managed, external)
+    - to:
+        - ipBlock:
+            cidr: 0.0.0.0/0
+            except:
+              - 10.0.0.0/8
+              - 172.16.0.0/12
+              - 192.168.0.0/16
+      ports:
+        - port: 9092
+          protocol: TCP
+        - port: 9094
+          protocol: TCP
+    # OpenTelemetry Collector / Tempo
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+          podSelector:
+            matchLabels:
+              app.kubernetes.io/name: tempo
+      ports:
+        - port: 4317
+          protocol: TCP
+    # Allow DNS for internal services
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - port: 53
+          protocol: UDP
+        - port: 53
+          protocol: TCP
+---
+# Allow monitoring components to scrape metrics
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-monitoring-scrape
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/part-of: bookstore-platform
+spec:
+  podSelector:
+    matchLabels:
+      metrics: prometheus
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - port: 8081
+          protocol: TCP
+---
+# Allow bookstore pods to communicate with each other for cluster-internal features
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-bookstore-internal
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/name: bookstore
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: bookstore
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: bookstore
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: bookstore

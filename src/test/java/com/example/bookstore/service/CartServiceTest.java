@@ -35,6 +35,9 @@ class CartServiceTest {
     @Mock
     private SecurityUtils securityUtils;
 
+    @Mock
+    private InventoryService inventoryService;
+
     @InjectMocks
     private CartService cartService;
 
@@ -105,6 +108,7 @@ class CartServiceTest {
             when(securityUtils.getCurrentUser()).thenReturn(testUser);
             when(cartRepository.findByUserId(1L)).thenReturn(Optional.of(testCart));
             when(bookRepository.findById(1L)).thenReturn(Optional.of(testBook));
+            when(inventoryService.getAvailableQuantity(1L)).thenReturn(10);
             when(cartRepository.save(any(Cart.class))).thenReturn(testCart);
 
             Cart result = cartService.addToCart(1L, 2);

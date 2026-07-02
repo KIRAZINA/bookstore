@@ -20,6 +20,8 @@ spring:
 app:
   cache:
     enabled: false
+  rate-limiting:
+    enabled: false
 
 management:
   endpoints:
@@ -36,5 +38,17 @@ management:
       application: bookstore-test
 
 jwt:
-  secret: test-secret-key-for-bookstore-application
-  expiration: 86400000
+  secret: bookstore-test-secret-key-that-is-long-enough-for-hs256
+  expiration: 3600000
+
+server:
+  port: 0
+  error:
+    include-stacktrace: never
+    include-exception: false
+    include-message: never
+    include-binding-errors: never
+
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{correlationId}] [%X{trace_id}] [%X{span_id}] - %msg%n"

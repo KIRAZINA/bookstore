@@ -2,10 +2,31 @@ spring:
   application:
     name: bookstore
 
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      retries: 3
+      compression-type: snappy
+      enable-idempotence: true
+    consumer:
+      auto-offset-reset: earliest
+      enable-auto-commit: false
+      max-poll-records: 100
+    listener:
+      concurrency: 3
+      missing-topics-fatal: false
+
   datasource:
-    url: jdbc:postgresql://localhost:5432/bookstore
-    username: bookstore
-    password: bookstore
+    url: ${DATASOURCE_URL:jdbc:postgresql://localhost:5432/bookstore}
+    username: ${DATASOURCE_USERNAME:bookstore}
+    password: ${DATASOURCE_PASSWORD:bookstore}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:10}
+      minimum-idle: ${DB_POOL_MIN_IDLE:2}
+      idle-timeout: 300000
+      connection-timeout: 30000
+      max-lifetime: 600000
 
   jpa:
     hibernate:
@@ -14,9 +35,6 @@ spring:
     show-sql: false
 
   mail:
-    # Uncomment to enable SMTP email sending:
-    # host: localhost
-    # port: 1025
     properties:
       mail.smtp.auth: false
       mail.smtp.starttls.enable: false
@@ -28,17 +46,33 @@ spring:
 
   data:
     redis:
-      host: localhost
-      port: 6379
-      connect-timeout: 2000
-      timeout: 2000
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      connect-timeout: ${REDIS_CONNECT_TIMEOUT:2000}
+      timeout: ${REDIS_TIMEOUT:2000}
 
   cache:
     type: redis
 
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
 app:
   cache:
     enabled: true
+  rate-limiting:
+    enabled: true
+  cors:
+    allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8080,http://localhost:3000}
+  inventory:
+    thresholds:
+      low: 10
+      critical: 3
+    cache-ttl-seconds: 60
+  outbox:
+    poll-interval: 1000
+    max-retries: 5
+    batch-size: 100
 
 management:
   endpoints:
@@ -73,14 +107,38 @@ info:
     java-version: ${java.version}
 
 jwt:
-  secret: mySecretKeyForBookstoreApplication12345
-  expiration: 86400000
+  secret: ${JWT_SECRET:}
+  expiration: ${JWT_EXPIRATION:1800000}
+  clock-skew-seconds: 30
 
 server:
   port: 8080
+  shutdown: graceful
+  error:
+    include-stacktrace: never
+    include-exception: false
+    include-message: never
+    include-binding-errors: never
 
 logging:
   level:
     root: INFO
     com.example.bookstore: DEBUG
     org.hibernate.SQL: WARN
+    io.opentelemetry: WARN
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{correlationId}] [%X{trace_id}] [%X{span_id}] - %msg%n"
+
+otel:
+  service:
+    name: ${spring.application.name}
+  traces:
+    exporter: otlp
+    sampler: ${OTEL_TRACES_SAMPLER:parentbased_always_on}
+  exporter:
+    otlp:
+      protocol: ${OTEL_EXPORTER_OTLP_PROTOCOL:grpc}
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4317}
+  instrumentation:
+    logback-appender:
+      experimental-log-attributes: true

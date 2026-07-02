@@ -6,6 +6,7 @@ import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Objects;
@@ -18,18 +19,28 @@ public class BookService {
     private final BookRepository bookRepository;
     private final CacheManager cacheManager;
     private final StringRedisTemplate redisTemplate;
+    private final InventoryService inventoryService;
+    private final InventoryAdminService inventoryAdminService;
 
     private static final String BOOKS_PREFIX = "books::";
     private static final String BOOK_BY_ID_PREFIX = "bookById::";
 
-    public BookService(BookRepository bookRepository, CacheManager cacheManager, ObjectProvider<StringRedisTemplate> redisTemplateProvider) {
+    public BookService(BookRepository bookRepository,
+                       CacheManager cacheManager,
+                       ObjectProvider<StringRedisTemplate> redisTemplateProvider,
+                       InventoryService inventoryService,
+                       InventoryAdminService inventoryAdminService) {
         this.bookRepository = bookRepository;
         this.cacheManager = cacheManager;
         this.redisTemplate = redisTemplateProvider.getIfAvailable();
+        this.inventoryService = inventoryService;
+        this.inventoryAdminService = inventoryAdminService;
     }
 
+    @Transactional
     public Book addBook(Book book) {
         Book saved = bookRepository.save(book);
+        inventoryAdminService.initializeInventory(saved.getId(), 0);
         evictBooksCache();
         return saved;
     }
@@ -49,23 +60,27 @@ public class BookService {
         return bookRepository.findByTitleOrAuthor(search);
     }
 
+    @Transactional
     public void deleteBook(Long id) {
         bookRepository.deleteById(id);
         evictBooksCache();
         evictBookByIdCache();
     }
 
+    @Transactional
     public Book updateStock(Long bookId, int stock) {
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new IllegalArgumentException("Book not found"));
-        if (stock < 0) {
-            throw new IllegalArgumentException("Stock cannot be negative");
-        }
-        book.setStock(stock);
-        Book saved = bookRepository.save(book);
+        inventoryAdminService.adjustInventory(bookId, stock,
+                "Admin stock update via BookService.updateStock");
+        Book saved = bookRepository.findById(bookId).orElseThrow();
         evictBooksCache();
         evictBookByIdCache();
         return saved;
+    }
+
+    public int getAvailableQuantity(Long bookId) {
+        return inventoryService.getAvailableQuantity(bookId);
     }
 
     private void evictBooksCache() {

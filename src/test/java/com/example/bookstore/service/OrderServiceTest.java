@@ -9,7 +9,7 @@ import com.example.bookstore.repository.OrderStatusHistoryRepository;
 import com.example.bookstore.repository.PaymentRepository;
 import com.example.bookstore.service.payment.DummyPaymentProvider;
 import org.junit.jupiter.api.BeforeEach;
-import org.springframework.context.ApplicationEventPublisher;
+import com.example.bookstore.event.publisher.DomainEventPublisher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -52,13 +52,16 @@ class OrderServiceTest {
     private DummyPaymentProvider paymentProvider;
 
     @Mock
-    private ApplicationEventPublisher eventPublisher;
+    private DomainEventPublisher domainEventPublisher;
 
     @Mock
     private SecurityUtils securityUtils;
 
     @Mock
     private BusinessMetrics businessMetrics;
+
+    @Mock
+    private InventoryService inventoryService;
 
     @InjectMocks
     private OrderService orderService;
@@ -109,7 +112,6 @@ class OrderServiceTest {
             book.setId(10L);
             book.setTitle("Concurrent Book");
             book.setPrice(new BigDecimal("19.99"));
-            book.setStock(5);
 
             CartItem cartItem = new CartItem();
             cartItem.setBook(book);
@@ -122,11 +124,19 @@ class OrderServiceTest {
 
             when(securityUtils.getCurrentUser()).thenReturn(testUser);
             when(cartService.getCart()).thenReturn(cart);
-            when(bookRepository.save(any(Book.class)))
-                    .thenThrow(new ObjectOptimisticLockingFailureException(Book.class, 10L));
+            when(inventoryService.getAvailableQuantity(10L)).thenReturn(5);
+            when(orderRepository.save(any(Order.class))).thenAnswer(invocation -> {
+                Order saved = invocation.getArgument(0);
+                if (saved.getId() == null) {
+                    saved.setId(100L);
+                }
+                return saved;
+            });
+            doThrow(new ObjectOptimisticLockingFailureException(Book.class, 10L))
+                    .when(inventoryService).reserveAll(anyLong(), any(), anyString());
 
             assertThrows(ObjectOptimisticLockingFailureException.class, () -> orderService.createOrder());
-            verify(orderRepository, never()).save(any(Order.class));
+            verify(orderRepository, times(1)).save(any(Order.class));
             verify(cartService, never()).clearCart();
         }
     }

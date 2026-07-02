@@ -1,0 +1,135 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+      - 'release/*'
+      - 'stable/*'
+  pull_request:
+    branches:
+      - main
+  # Allow manual deployment trigger with environment selection
+  workflow_dispatch:
+    inputs:
+      deploy-environment:
+        description: 'Deploy to environment'
+        required: false
+        type: choice
+        options:
+          - none
+          - dev
+          - staging
+          - prod
+        default: none
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  JAVA_VERSION: '21'
+
+jobs:
+  static-analysis:
+    name: Static Code Analysis
+    uses: ./.github/workflows/reusable-static-analysis.yml
+
+  build-and-test:
+    name: Build, Test & Coverage
+    uses: ./.github/workflows/reusable-build.yml
+    secrets: inherit
+
+  security-scan:
+    name: Dependency Security Scan
+    uses: ./.github/workflows/reusable-security.yml
+    secrets: inherit
+
+  docker-validate:
+    name: Docker Image Validation
+    needs: [build-and-test]
+    if: |
+      github.event_name == 'push' &&
+      (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Build Application Docker Image
+        run: |
+          docker build \
+            --tag bookstore:ci \
+            --tag bookstore:${{ github.sha }} \
+            .
+
+      - name: Validate Docker Image Build
+        run: |
+          docker image inspect bookstore:ci
+          echo "Docker image built successfully:"
+          docker images bookstore:ci
+
+  quality-gate:
+    name: Quality Gate Summary
+    if: always()
+    needs: [static-analysis, build-and-test, security-scan]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check Static Analysis Status
+        if: needs.static-analysis.result != 'success'
+        run: |
+          echo "Static Analysis: ${{ needs.static-analysis.result }}"
+          exit 1
+
+      - name: Check Build & Test Status
+        if: needs.build-and-test.result != 'success'
+        run: |
+          echo "Build & Test: ${{ needs.build-and-test.result }}"
+          exit 1
+
+      - name: Check Security Scan Status
+        if: needs.security-scan.result != 'success'
+        run: |
+          echo "Security Scan: ${{ needs.security-scan.result }}"
+          exit 1
+
+      - name: All Quality Gates Passed
+        if: success()
+        run: |
+          echo 'All quality gates passed'
+
+  # ============================================================
+  # Deployment Stage
+  # ============================================================
+  # Automated deployment triggers:
+  #   main branch:           dev environment (on push)
+  #   release/* branch:      staging environment (on push)
+  #   stable/* branch:       prod environment (on push)
+  #   workflow_dispatch:     selected environment (manual trigger)
+  #
+  # Deployment must pass all quality gates before proceeding.
+  # ============================================================
+  deploy:
+    name: Deploy to ${{ (github.event_name == 'workflow_dispatch' && inputs.deploy-environment) || 
+      (startsWith(github.ref, 'refs/heads/stable/') && 'prod') || 
+      (startsWith(github.ref, 'refs/heads/release/') && 'staging') || 
+      'dev' }}
+    needs: [quality-gate]
+    if: |
+      !cancelled() && !failure() && (
+        github.event_name == 'workflow_dispatch' ||
+        (github.event_name == 'push' && (
+          github.ref == 'refs/heads/main' ||
+          startsWith(github.ref, 'refs/heads/release/') ||
+          startsWith(github.ref, 'refs/heads/stable/')
+        ))
+      )
+    uses: ./.github/workflows/reusable-deploy.yml
+    with:
+      environment: ${{ (github.event_name == 'workflow_dispatch' && inputs.deploy-environment) || 
+        (startsWith(github.ref, 'refs/heads/stable/') && 'prod') || 
+        (startsWith(github.ref, 'refs/heads/release/') && 'staging') || 
+        'dev' }}
+      image-tag: ${{ github.sha }}
+      deploy-enabled: ${{ vars.DEPLOYMENT_ENABLED == 'true' }}
+    secrets: inherit

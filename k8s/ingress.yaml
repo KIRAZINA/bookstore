@@ -1,0 +1,105 @@
+# ============================================================
+# Ingress Configuration
+# ============================================================
+# Uses NGINX Ingress Controller (most widely adopted in enterprise)
+# Alternatives: AWS ALB Ingress Controller, Azure Application Gateway, GCP GKE Ingress
+#
+# For production:
+# 1. Replace YOUR_DOMAIN with the actual domain
+# 2. Configure DNS A record pointing to ingress controller's Load Balancer
+# 3. Obtain TLS certificate (cert-manager for Let's Encrypt or cloud CA)
+#
+# Security features:
+# - TLS 1.3 only (no older versions)
+# - HTTP->HTTPS redirect
+# - Security headers via ConfigMap
+# - Request size limits
+# - Rate limiting preparation
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: bookstore-ingress
+  namespace: bookstore
+  labels:
+    app.kubernetes.io/name: bookstore
+    app.kubernetes.io/component: ingress
+  annotations:
+    # === Ingress Controller ===
+    kubernetes.io/ingress.class: nginx
+
+    # === SSL/TLS ===
+    # Redirect HTTP to HTTPS
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Use TLS 1.3 only (strongest security)
+    nginx.ingress.kubernetes.io/ssl-protocols: "TLSv1.3"
+    # Strong ciphers only
+    nginx.ingress.kubernetes.io/ssl-ciphers: "ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384"
+    # HSTS (HTTP Strict Transport Security)
+    nginx.ingress.kubernetes.io/hsts: "true"
+    nginx.ingress.kubernetes.io/hsts-max-age: "31536000"
+    nginx.ingress.kubernetes.io/hsts-include-subdomains: "true"
+    nginx.ingress.kubernetes.io/hsts-preload: "false"
+
+    # === Security Headers ===
+    # Prevent clickjacking
+    nginx.ingress.kubernetes.io/configuration-snippet: |
+      more_set_headers "X-Frame-Options: DENY";
+      more_set_headers "X-Content-Type-Options: nosniff";
+      more_set_headers "X-XSS-Protection: 1; mode=block";
+      more_set_headers "Referrer-Policy: strict-origin-when-cross-origin";
+      more_set_headers "Permissions-Policy: camera=(), microphone=(), geolocation=()";
+
+    # === Request Limits ===
+    # Max body size: 10MB (prevents large payload DoS)
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    # Max header size: 16KB
+    nginx.ingress.kubernetes.io/proxy-buffer-size: "16k"
+
+    # === Timeouts ===
+    # 60s for proxy to backend (must match Spring Boot's server.servlet.session.timeout)
+    nginx.ingress.kubernetes.io/proxy-connect-timeout: "10"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+
+    # === Compression ===
+    nginx.ingress.kubernetes.io/enable-gzip: "true"
+    nginx.ingress.kubernetes.io/gzip-min-length: "1000"
+    nginx.ingress.kubernetes.io/gzip-types: "application/json application/javascript text/css text/plain"
+
+    # === Rate Limiting ===
+    # Token bucket rate limiting per client IP
+    # 100 requests/second burst 200
+    # nginx.ingress.kubernetes.io/limit-rps: "100"
+    # nginx.ingress.kubernetes.io/limit-burst: "200"
+
+    # === CORS (if needed at ingress level) ===
+    # nginx.ingress.kubernetes.io/enable-cors: "true"
+    # nginx.ingress.kubernetes.io/cors-allow-origin: "https://bookstore.example.com"
+    # nginx.ingress.kubernetes.io/cors-allow-methods: "GET, POST, PUT, DELETE, PATCH, OPTIONS"
+    # nginx.ingress.kubernetes.io/cors-allow-headers: "Authorization, Content-Type, X-Requested-With"
+    # nginx.ingress.kubernetes.io/cors-max-age: "3600"
+
+    # === Monitoring ===
+    # Enable Prometheus metrics for NGINX
+    nginx.ingress.kubernetes.io/enable-opentelemetry: "true"
+    nginx.ingress.kubernetes.io/opentelemetry-trust-incoming-span: "true"
+
+spec:
+  tls:
+    - hosts:
+        - api.bookstore.example.com
+      # TLS secret created by cert-manager
+      # cert-manager annotation on Issuer/ClusterIssuer
+      secretName: bookstore-tls
+  rules:
+    - host: api.bookstore.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: bookstore
+                port:
+                  number: 80

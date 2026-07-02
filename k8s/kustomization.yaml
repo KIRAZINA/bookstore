@@ -1,0 +1,63 @@
+# ============================================================
+# Bookstore Platform — Production Base Kustomization
+# ============================================================
+# This is the base configuration for all environments.
+# Environment-specific overrides:
+#   dev:     minReplicas=1, smaller resources, local secrets
+#   staging: minReplicas=2, staging DB, staging secrets
+#   prod:    minReplicas=3, managed services, ExternalSecret
+#
+# Usage:
+#   kubectl apply -k k8s/overlays/prod
+#
+# ArgoCD Application reference:
+#   spec.source.path: k8s/overlays/prod
+#
+# Future GitOps structure:
+#   k8s/
+#     base/          — environment-agnostic base
+#     overlays/
+#       dev/         — development overrides
+#       staging/     — staging overrides
+#       prod/        — production overrides
+# ============================================================
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+# === Namespace ===
+# All resources are deployed to the bookstore namespace
+namespace: bookstore
+
+# === Resource References ===
+resources:
+  - namespace.yaml
+  - serviceaccount.yaml
+  - configmap.yaml
+  - secret.yaml
+  - priorityclass.yaml
+  - pdb.yaml
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+  - ingress.yaml
+  - hpa.yaml
+
+# === Common Labels ===
+# Applied to all resources for consistent labeling
+commonLabels:
+  app.kubernetes.io/name: bookstore
+  app.kubernetes.io/part-of: bookstore-platform
+  app.kubernetes.io/managed-by: kustomize
+
+# === Common Annotations ===
+commonAnnotations:
+  app.kubernetes.io/repository: "https://github.com/example/bookstore"
+
+# === Images ===
+# Image tag should be set by CI/CD pipeline during deployment
+# The :latest tag is replaced with the commit SHA via kustomize edit
+images:
+  - name: bookstore
+    newName: your-registry/bookstore-api
+    # newTag is set by CI/CD: kustomize edit set image bookstore=your-registry/bookstore-api:${GIT_SHA}
+    # For local dev: keep as bookstore:latest

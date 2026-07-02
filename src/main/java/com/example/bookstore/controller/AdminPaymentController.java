@@ -5,6 +5,7 @@ import com.example.bookstore.controller.dto.PaymentResponse;
 import com.example.bookstore.model.Payment;
 import com.example.bookstore.model.PaymentHistory;
 import com.example.bookstore.model.PaymentStatus;
+import com.example.bookstore.service.AuditService;
 import com.example.bookstore.service.PaymentService;
 import org.springframework.data.domain.Page;
 import org.springframework.http.ResponseEntity;
@@ -20,9 +21,11 @@ import java.util.stream.Collectors;
 public class AdminPaymentController {
 
     private final PaymentService paymentService;
+    private final AuditService auditService;
 
-    public AdminPaymentController(PaymentService paymentService) {
+    public AdminPaymentController(PaymentService paymentService, AuditService auditService) {
         this.paymentService = paymentService;
+        this.auditService = auditService;
     }
 
     @GetMapping
@@ -44,7 +47,9 @@ public class AdminPaymentController {
 
     @PostMapping("/{id}/refund")
     public ResponseEntity<PaymentResponse> refundPayment(@PathVariable Long id) {
-        return ResponseEntity.ok(toResponse(paymentService.refundPayment(id)));
+        PaymentResponse response = toResponse(paymentService.refundPayment(id));
+        auditService.logAdminAction("REFUND_PAYMENT", "paymentId=" + id);
+        return ResponseEntity.ok(response);
     }
 
     @GetMapping("/{id}/history")

@@ -89,7 +89,7 @@ class AuthControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.error").value("User with this username already exists"));
+                    .andExpect(jsonPath("$.message").value("User with this username already exists"));
         }
 
         @Test

@@ -3,6 +3,7 @@ package com.example.bookstore.service;
 import com.example.bookstore.model.AppUser;
 import com.example.bookstore.model.UserRole;
 import com.example.bookstore.repository.UserRepository;
+import io.opentelemetry.instrumentation.annotations.WithSpan;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -26,6 +27,7 @@ public class UserService implements UserDetailsService {
         this.passwordEncoder = passwordEncoder;
     }
 
+    @WithSpan("UserService.registerUser")
     public AppUser registerUser(AppUser user) {
         if (userRepository.findByUsername(user.getUsername()).isPresent()) {
             throw new IllegalArgumentException("User with this username already exists");

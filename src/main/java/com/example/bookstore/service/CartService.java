@@ -17,11 +17,16 @@ public class CartService {
     private final CartRepository cartRepository;
     private final BookRepository bookRepository;
     private final SecurityUtils securityUtils;
+    private final InventoryService inventoryService;
 
-    public CartService(CartRepository cartRepository, BookRepository bookRepository, SecurityUtils securityUtils) {
+    public CartService(CartRepository cartRepository,
+                       BookRepository bookRepository,
+                       SecurityUtils securityUtils,
+                       InventoryService inventoryService) {
         this.cartRepository = cartRepository;
         this.bookRepository = bookRepository;
         this.securityUtils = securityUtils;
+        this.inventoryService = inventoryService;
     }
 
     public Cart getCart() {
@@ -42,8 +47,11 @@ public class CartService {
         Cart cart = getCart();
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new IllegalArgumentException("Book not found"));
-        if (book.getStock() < quantity) {
-            throw new IllegalStateException("Not enough stock for book: " + book.getTitle());
+        int available = inventoryService.getAvailableQuantity(bookId);
+        if (available < quantity) {
+            throw new IllegalStateException(
+                "Not enough stock for book: " + book.getTitle() +
+                ". Available: " + available + ", Requested: " + quantity);
         }
 
         Optional<CartItem> existingItem = cart.getItems().stream()
@@ -70,8 +78,11 @@ public class CartService {
         Cart cart = getCart();
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new IllegalArgumentException("Book not found"));
-        if (book.getStock() < quantity) {
-            throw new IllegalStateException("Not enough stock for book: " + book.getTitle());
+        int available = inventoryService.getAvailableQuantity(bookId);
+        if (available < quantity) {
+            throw new IllegalStateException(
+                "Not enough stock for book: " + book.getTitle() +
+                ". Available: " + available + ", Requested: " + quantity);
         }
 
         CartItem item = cart.getItems().stream()

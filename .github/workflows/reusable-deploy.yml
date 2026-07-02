@@ -1,0 +1,237 @@
+# ============================================================
+# Deploy Stage — Reusable Workflow
+# ============================================================
+# Prepares deployment artifacts and validates manifests.
+# Actual deployment to cloud is disabled by default;
+# set DEPLOYMENT_ENABLED=true to enable.
+#
+# Future deployment targets:
+# - AWS EKS: eksctl / Helm / ArgoCD
+# - Azure AKS: Helm / Azure DevOps
+# - GCP GKE: Helm / Cloud Deploy / ArgoCD
+#
+# GitOps integration:
+# - Instead of pushing directly, this workflow can push to
+#   a GitOps repository (GitHub, GitLab, or ArgoCD repo)
+# - ArgoCD/Flux picks up changes automatically
+# ============================================================
+name: Deploy - Container Image & Manifests
+
+on:
+  workflow_call:
+    inputs:
+      environment:
+        description: 'Target environment (dev, staging, prod)'
+        required: true
+        type: string
+      image-tag:
+        description: 'Docker image tag'
+        required: true
+        type: string
+      deploy-enabled:
+        description: 'Enable actual deployment'
+        required: false
+        type: boolean
+        default: false
+      aws-region:
+        description: 'AWS region for ECR'
+        required: false
+        type: string
+        default: 'us-east-1'
+    secrets:
+      CONTAINER_REGISTRY:
+        description: 'Container registry URL'
+        required: true
+      CONTAINER_REGISTRY_USERNAME:
+        description: 'Container registry username'
+        required: false
+      CONTAINER_REGISTRY_PASSWORD:
+        description: 'Container registry password'
+        required: false
+      KUBE_CONFIG:
+        description: 'Base64-encoded kubeconfig for deployment'
+        required: false
+
+jobs:
+  docker-build-and-push:
+    name: Build & Push Docker Image
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ secrets.CONTAINER_REGISTRY }}
+          username: ${{ secrets.CONTAINER_REGISTRY_USERNAME }}
+          password: ${{ secrets.CONTAINER_REGISTRY_PASSWORD }}
+
+      - name: Extract Metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ secrets.CONTAINER_REGISTRY }}/bookstore-api
+          tags: |
+            type=raw,value=${{ inputs.image-tag }}
+            type=raw,value=${{ github.ref_name }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,format=short
+
+      - name: Build and Push Docker Image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          # Build arguments for reproducible builds
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
+
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ secrets.CONTAINER_REGISTRY }}/bookstore-api:${{ inputs.image-tag }}
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Upload Trivy Scan Results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy'
+
+      - name: Sign Docker Image with Cosign
+        uses: sigstore/cosign-installer@v3
+      - name: Sign Image
+        run: |
+          cosign sign --yes \
+            ${{ secrets.CONTAINER_REGISTRY }}/bookstore-api@${{ steps.meta.outputs.digest }}
+
+  prepare-manifests:
+    name: Prepare Kubernetes Manifests
+    runs-on: ubuntu-latest
+    needs: [docker-build-and-push]
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Set Image Tag in Kustomize
+        working-directory: k8s
+        run: |
+          kustomize edit set image \
+            bookstore=${{ secrets.CONTAINER_REGISTRY }}/bookstore-api:${{ inputs.image-tag }}
+          kustomize edit set namespace bookstore
+          cat kustomization.yaml
+
+      - name: Validate Kubernetes Manifests
+        run: |
+          kustomize build k8s/ --enable-helm --load-restrictor=LoadRestrictionsNone > /dev/null
+          echo "Kustomize build successful"
+
+      - name: Validate with Kubeconform
+        uses: yannh/kubeconform-action@v1
+        with:
+          files:
+            k8s/
+          # Skip validators for CRDs (Prometheus, ServiceMonitor, etc.)
+          skip:
+            - prometheuses.monitoring.coreos.com
+            - servicemonitors.monitoring.coreos.com
+            - externalsecrets.external-secrets.io
+          strict: true
+          verbose: 1
+
+      - name: Checkov Kubernetes Scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: k8s/
+          framework: kubernetes
+          quiet: true
+          skip_check: CKV_K8S_12,CKV_K8S_21
+
+      - name: Upload Kustomized Manifests
+        if: inputs.deploy-enabled
+        uses: actions/upload-artifact@v4
+        with:
+          name: k8s-manifests-${{ inputs.environment }}
+          path: k8s/
+          retention-days: 7
+
+  deploy:
+    name: Deploy to Kubernetes
+    if: inputs.deploy-enabled
+    needs: [docker-build-and-push, prepare-manifests]
+    runs-on: ubuntu-latest
+    environment:
+      name: ${{ inputs.environment }}
+      url: https://api.bookstore.example.com
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Set Image Tag
+        working-directory: k8s
+        run: |
+          kustomize edit set image \
+            bookstore=${{ secrets.CONTAINER_REGISTRY }}/bookstore-api:${{ inputs.image-tag }}
+
+      - name: Configure kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'latest'
+
+      - name: Connect to Cluster
+        run: |
+          echo "${{ secrets.KUBE_CONFIG }}" | base64 --decode > kubeconfig
+          export KUBECONFIG=kubeconfig
+          kubectl cluster-info
+
+      - name: Apply Manifests
+        run: |
+          kustomize build k8s/ | kubectl apply -f -
+
+      - name: Verify Deployment Rollout
+        run: |
+          kubectl -n bookstore rollout status deployment/bookstore \
+            --timeout=5m
+
+      - name: Verify Pod Health
+        run: |
+          kubectl -n bookstore get pods -l app.kubernetes.io/name=bookstore
+          kubectl -n bookstore wait --for=condition=Ready pods \
+            -l app.kubernetes.io/name=bookstore --timeout=5m
+
+      - name: Post-Deployment Smoke Test
+        run: |
+          # Basic health check through the ingress
+          kubectl -n bookstore run smoke-test \
+            --image=curlimages/curl:8.9.0 \
+            --restart=Never \
+            --command -- curl -s -o /dev/null -w "%{http_code}" \
+            http://bookstore/actuator/health
+          kubectl -n bookstore wait --for=condition=Complete job/smoke-test --timeout=30s
+          kubectl -n bookstore logs smoke-test
+          kubectl -n bookstore delete pod smoke-test
+
+      - name: Rollback on Failure
+        if: failure()
+        run: |
+          echo "Deployment failed! Initiating rollback..."
+          kubectl -n bookstore rollout undo deployment/bookstore
+          kubectl -n bookstore rollout status deployment/bookstore --timeout=3m
