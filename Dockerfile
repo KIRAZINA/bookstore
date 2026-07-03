@@ -3,7 +3,7 @@
 # ============================================================
 # This stage only invalidates when pom.xml or Maven wrapper changes,
 # keeping dependency downloads out of the main build cache
-FROM eclipse-temurin:21-jdk-alpine AS dependencies
+FROM eclipse-temurin:25-jdk-alpine AS dependencies
 
 WORKDIR /build
 
@@ -39,7 +39,7 @@ RUN ./mvnw clean package -DskipTests -B --no-transfer-progress && \
 # ============================================================
 # Stage 3: Production runtime image
 # ============================================================
-FROM eclipse-temurin:21-jre-alpine AS runtime
+FROM eclipse-temurin:25-jre-alpine AS runtime
 
 # === Security & OS hardening ===
 RUN addgroup -S bookstore && \
