@@ -1,5 +1,6 @@
 package com.example.bookstore.messaging.consumer;
 
+import com.example.bookstore.config.DeadLetterService;
 import com.example.bookstore.config.KafkaTopicConfig;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
@@ -25,9 +26,11 @@ public class NotificationEventConsumer extends AbstractIdempotentConsumer {
 
     public NotificationEventConsumer(ProcessedEventRepository processedEventRepository,
                                       MessagingMetrics messagingMetrics,
+                                      DeadLetterService deadLetterService,
                                       EmailTemplateEngine templateEngine,
                                       EmailService emailService) {
-        super(processedEventRepository, messagingMetrics, KafkaTopicConfig.CONSUMER_GROUP_NOTIFICATIONS);
+        super(processedEventRepository, messagingMetrics, KafkaTopicConfig.CONSUMER_GROUP_NOTIFICATIONS,
+                deadLetterService, KafkaTopicConfig.TOPIC_NOTIFICATIONS);
         this.templateEngine = templateEngine;
         this.emailService = emailService;
     }

@@ -14,11 +14,14 @@ import com.example.bookstore.repository.InventoryHistoryRepository;
 import com.example.bookstore.repository.InventoryRepository;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import jakarta.persistence.EntityNotFoundException;
+import jakarta.persistence.LockTimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
@@ -251,9 +254,31 @@ public class InventoryService {
         }
     }
 
+    @Transactional
+    @Retryable(
+        retryFor = { CannotAcquireLockException.class, PessimisticLockingFailureException.class,
+                     LockTimeoutException.class, OptimisticLockingFailureException.class },
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 100, multiplier = 2)
+    )
     public void reserveAll(Long orderId, Map<Long, Integer> bookQuantities, String changedBy) {
-        for (Map.Entry<Long, Integer> entry : bookQuantities.entrySet()) {
-            reserve(entry.getKey(), entry.getValue(), orderId, changedBy);
+        List<Map.Entry<Long, Integer>> sorted = bookQuantities.entrySet().stream()
+                .sorted(Map.Entry.comparingByKey())
+                .toList();
+        for (Map.Entry<Long, Integer> entry : sorted) {
+            Inventory inventory = inventoryRepository.findByBookIdWithLock(entry.getKey())
+                    .orElseThrow(() -> new EntityNotFoundException("Inventory not found for book: " + entry.getKey()));
+            validator.validateReservation(inventory, entry.getValue());
+
+            int previousAvailable = inventory.getAvailableQuantity();
+            int previousReserved = inventory.getReservedQuantity();
+            inventory.reserve(entry.getValue());
+            Inventory saved = inventoryRepository.save(inventory);
+
+            recordHistory(saved.getId(), entry.getKey(), InventoryEventType.RESERVED,
+                    previousAvailable, saved.getAvailableQuantity(),
+                    previousReserved, saved.getReservedQuantity(),
+                    entry.getValue(), orderId, null, changedBy, "Order reservation (batch)");
         }
         domainEventPublisher.publish(
                 new InventoryReservedEvent(orderId, Map.copyOf(bookQuantities)),

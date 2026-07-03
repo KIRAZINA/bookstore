@@ -1,0 +1,105 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: bookstore
+
+resources:
+  - ../../namespace.yaml
+  - ../../serviceaccount.yaml
+  - ../../configmap.yaml
+  - ../../secret.yaml
+  - ../../priorityclass.yaml
+  - ../../pdb.yaml
+  - ../../deployment.yaml
+  - ../../service.yaml
+  - ../../networkpolicy.yaml
+  - ../../ingress.yaml
+  - ../../hpa.yaml
+  - ../../resourcequota.yaml
+
+commonLabels:
+  app.kubernetes.io/name: bookstore
+  app.kubernetes.io/part-of: bookstore-platform
+  app.kubernetes.io/managed-by: kustomize
+  environment: production
+
+commonAnnotations:
+  app.kubernetes.io/repository: "https://github.com/example/bookstore"
+
+images:
+  - name: bookstore
+    newName: your-registry/bookstore-api
+    newTag: latest
+
+patches:
+  - target:
+      kind: Deployment
+      name: bookstore
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 5
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "1"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "1Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "2Gi"
+      - op: replace
+        path: /spec/template/spec/affinity/podAntiAffinity/preferredDuringSchedulingIgnoredDuringExecution/0/weight
+        value: 100
+  - target:
+      kind: ConfigMap
+      name: bookstore-config
+    patch: |-
+      - op: replace
+        path: /data/SPRING_PROFILES_ACTIVE
+        value: "prod"
+      - op: replace
+        path: /data/CORS_ALLOWED_ORIGINS
+        value: "https://bookstore.example.com"
+      - op: replace
+        path: /data/DB_POOL_MAX_SIZE
+        value: "30"
+      - op: replace
+        path: /data/DB_POOL_MIN_IDLE
+        value: "10"
+      - op: replace
+        path: /data/OTEL_TRACES_SAMPLER_ARG
+        value: "0.5"
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: bookstore-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 5
+      - op: replace
+        path: /spec/maxReplicas
+        value: 30
+  - target:
+      kind: Ingress
+      name: bookstore-ingress
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.bookstore.example.com
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: api.bookstore.example.com
+      - op: replace
+        path: /spec/tls/0/secretName
+        value: bookstore-tls
+  - target:
+      kind: PodDisruptionBudget
+      name: bookstore-pdb
+    patch: |-
+      - op: replace
+        path: /spec/minAvailable
+        value: 3

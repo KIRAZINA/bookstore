@@ -31,4 +31,8 @@ public interface EventOutboxRepository extends JpaRepository<EventOutbox, UUID> 
     @Modifying
     @Query("UPDATE EventOutbox e SET e.retryCount = e.retryCount + 1 WHERE e.id = :id")
     int incrementRetry(UUID id);
+
+    @Modifying
+    @Query("DELETE FROM EventOutbox e WHERE e.status = 'PUBLISHED' AND e.publishedAt < :before")
+    int deletePublishedOlderThan(Instant before);
 }

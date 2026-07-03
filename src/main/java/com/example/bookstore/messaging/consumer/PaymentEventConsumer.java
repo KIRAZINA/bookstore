@@ -1,5 +1,6 @@
 package com.example.bookstore.messaging.consumer;
 
+import com.example.bookstore.config.DeadLetterService;
 import com.example.bookstore.config.KafkaTopicConfig;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
@@ -17,8 +18,10 @@ public class PaymentEventConsumer extends AbstractIdempotentConsumer {
     private static final Logger log = LoggerFactory.getLogger(PaymentEventConsumer.class);
 
     public PaymentEventConsumer(ProcessedEventRepository processedEventRepository,
-                                 MessagingMetrics messagingMetrics) {
-        super(processedEventRepository, messagingMetrics, KafkaTopicConfig.CONSUMER_GROUP_PAYMENTS);
+                                 MessagingMetrics messagingMetrics,
+                                 DeadLetterService deadLetterService) {
+        super(processedEventRepository, messagingMetrics, KafkaTopicConfig.CONSUMER_GROUP_PAYMENTS,
+                deadLetterService, KafkaTopicConfig.TOPIC_PAYMENTS);
     }
 
     @KafkaListener(topics = KafkaTopicConfig.TOPIC_PAYMENTS,

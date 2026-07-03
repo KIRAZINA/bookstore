@@ -82,16 +82,28 @@ ENV SPRING_PROFILES_ACTIVE=prod \
 
 # === JVM Optimization for Containers ===
 # -XX:+UseContainerSupport (default in JDK 21): detects container memory/CPU limits
+#   Automatically sets -Xmx, -Xms based on container memory limits (up to 25% of limit)
 # -XX:+HeapDumpOnOutOfMemoryError: captures heap dump for post-mortem analysis
-# -XX:HeapDumpPath: writes dump to /tmp (writeable tmpfs in K8s)
+# -XX:HeapDumpPath: writes dump to /tmp (writeable emptyDir in K8s)
 # -XX:+ExitOnOutOfMemoryError: exits JVM on OOM so orchestrator restarts pod
+# -XX:+UseZGC: ultra-low-latency garbage collector (<1ms pause times)
+#   ZGC scales well across heap sizes (512MB to 16TB) with minimal CPU overhead
+# -XX:-OmitStackTraceInFastThrow: preserves full exception stack traces
+# -XX:+AlwaysPreTouch: touches all heap pages at startup for consistent performance
+#   Prevents runtime page faults that could cause latency spikes
+# -Dsun.net.inetaddr.ttl: DNS cache TTL for container environments (30s)
+#   Prevents stale DNS lookups when pods restart with new IPs
 # -Djava.security.egd: faster SecureRandom initialization in containers
-# --add-opens: required by some instrumentation agents
+# --add-opens: required by some instrumentation agents (OTel, etc.)
 ENV JAVA_TOOL_OPTIONS="\
     -XX:+UseContainerSupport \
     -XX:+HeapDumpOnOutOfMemoryError \
     -XX:HeapDumpPath=/tmp/heapdump.hprof \
     -XX:+ExitOnOutOfMemoryError \
+    -XX:+UseZGC \
+    -XX:-OmitStackTraceInFastThrow \
+    -XX:+AlwaysPreTouch \
+    -Dsun.net.inetaddr.ttl=30 \
     -Djava.security.egd=file:/dev/./urandom"
 
 # === Ports ===
@@ -119,4 +131,7 @@ STOPSIGNAL SIGTERM
 # 1. Java PID 1 receives kubernetes SIGTERM directly
 # 2. Graceful shutdown drains requests before exit
 # 3. Prometheus metrics flush on shutdown
+# 4. ${0} ${@} passes CMD arguments from Docker/Kubernetes
+#    This allows K8s to override the default command for
+#    init containers (e.g., Flyway migration)
 ENTRYPOINT ["sh", "-c", "exec java ${JAVA_OPTS} -javaagent:/app/opentelemetry-javaagent.jar -jar /app/app.jar ${0} ${@}"]

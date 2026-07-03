@@ -50,17 +50,47 @@ class PaymentStatusTest {
     }
 
     @Test
-    @DisplayName("COMPLETED can transition to REFUNDED")
-    void completed_CanTransitionTo_Refunded() {
-        assertTrue(PaymentStatus.COMPLETED.canTransitionTo(PaymentStatus.REFUNDED));
+    @DisplayName("COMPLETED can transition to REFUND_PROCESSING")
+    void completed_CanTransitionTo_RefundProcessing() {
+        assertTrue(PaymentStatus.COMPLETED.canTransitionTo(PaymentStatus.REFUND_PROCESSING));
     }
 
     @Test
-    @DisplayName("COMPLETED cannot transition to anything else")
-    void completed_CannotTransitionTo_Other() {
+    @DisplayName("COMPLETED cannot transition to REFUNDED directly")
+    void completed_CannotTransitionTo_Refunded() {
+        assertFalse(PaymentStatus.COMPLETED.canTransitionTo(PaymentStatus.REFUNDED));
+    }
+
+    @Test
+    @DisplayName("COMPLETED cannot transition to terminal states directly")
+    void completed_CannotTransitionTo_Terminal() {
         assertFalse(PaymentStatus.COMPLETED.canTransitionTo(PaymentStatus.PENDING));
         assertFalse(PaymentStatus.COMPLETED.canTransitionTo(PaymentStatus.CANCELLED));
         assertFalse(PaymentStatus.COMPLETED.canTransitionTo(PaymentStatus.FAILED));
+    }
+
+    @Test
+    @DisplayName("REFUND_PROCESSING can transition to REFUNDED")
+    void refundProcessing_CanTransitionTo_Refunded() {
+        assertTrue(PaymentStatus.REFUND_PROCESSING.canTransitionTo(PaymentStatus.REFUNDED));
+    }
+
+    @Test
+    @DisplayName("REFUND_PROCESSING can transition to COMPLETED (failure revert)")
+    void refundProcessing_CanTransitionTo_Completed() {
+        assertTrue(PaymentStatus.REFUND_PROCESSING.canTransitionTo(PaymentStatus.COMPLETED));
+    }
+
+    @Test
+    @DisplayName("REFUND_PROCESSING can transition to FAILED")
+    void refundProcessing_CanTransitionTo_Failed() {
+        assertTrue(PaymentStatus.REFUND_PROCESSING.canTransitionTo(PaymentStatus.FAILED));
+    }
+
+    @Test
+    @DisplayName("REFUND_PROCESSING is not terminal")
+    void refundProcessing_IsNotTerminal() {
+        assertFalse(PaymentStatus.REFUND_PROCESSING.isTerminal());
     }
 
     @Test
@@ -96,9 +126,9 @@ class PaymentStatusTest {
     }
 
     @Test
-    @DisplayName("COMPLETED is terminal")
-    void completed_IsTerminal() {
-        assertTrue(PaymentStatus.COMPLETED.isTerminal());
+    @DisplayName("COMPLETED is not terminal (can transition to REFUND_PROCESSING)")
+    void completed_IsNotTerminal() {
+        assertFalse(PaymentStatus.COMPLETED.isTerminal());
     }
 
     @Test

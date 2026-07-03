@@ -18,3 +18,7 @@ checkstyle.xml
 pmd-ruleset.xml
 mvnw.cmd
 *.log
+k8s/
+# Exclude Maven wrapper JAR from build context (managed by Maven)
+.mvn/repository/
+.mvn/wrapper/maven-wrapper.jar

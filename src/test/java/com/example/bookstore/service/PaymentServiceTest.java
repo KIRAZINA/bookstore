@@ -124,6 +124,7 @@ class PaymentServiceTest {
         @DisplayName("Completes payment and transitions order to PAID")
         void processPayment_Success() {
             when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.of(payment));
+            when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
             when(paymentProvider.getName()).thenReturn("DUMMY");
             when(paymentProvider.processPayment(any(Payment.class)))
                     .thenReturn(PaymentProviderResponse.success("TXN-123", PaymentStatus.COMPLETED));
@@ -199,7 +200,7 @@ class PaymentServiceTest {
     @DisplayName("refundPayment")
     class RefundPaymentTests {
         @Test
-        @DisplayName("Refunds COMPLETED payment")
+        @DisplayName("Refunds COMPLETED payment through two-phase transaction")
         void refundPayment_Success() {
             payment.setPaymentStatus(PaymentStatus.COMPLETED);
             payment.setTransactionId("TXN-123");
@@ -213,11 +214,79 @@ class PaymentServiceTest {
 
             assertNotNull(result);
             assertEquals(PaymentStatus.REFUNDED, result.getPaymentStatus());
+            assertNotNull(result.getTransactionId());
+            verify(paymentRepository, times(2)).save(any(Payment.class));
+        }
+
+        @Test
+        @DisplayName("Preserves inventory on successful refund")
+        void refundPayment_RestoresStock() {
+            payment.setPaymentStatus(PaymentStatus.COMPLETED);
+            payment.setTransactionId("TXN-123");
+            OrderItem item = new OrderItem();
+            Book book = new Book();
+            book.setId(1L);
+            item.setBook(book);
+            item.setQuantity(2);
+            order.setItems(List.of(item));
+
+            when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
+            when(paymentProvider.refundPayment(any(Payment.class)))
+                    .thenReturn(PaymentProviderResponse.success("TXN-123-REF", PaymentStatus.REFUNDED));
+            when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
+
+            paymentService.refundPayment(1L);
+
+            verify(inventoryService).restoreAllStockForOrder(
+                    anyMap(), eq(1L), anyString(), anyString());
+        }
+
+        @Test
+        @DisplayName("External provider not called inside DB transaction")
+        void refundPayment_ExternalCallOutsideTransaction() {
+            payment.setPaymentStatus(PaymentStatus.COMPLETED);
+            payment.setTransactionId("TXN-123");
+
+            when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
+            when(paymentProvider.refundPayment(any(Payment.class)))
+                    .thenReturn(PaymentProviderResponse.success("TXN-123-REF", PaymentStatus.REFUNDED));
+            when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
+
+            paymentService.refundPayment(1L);
+
+            verify(paymentProvider).refundPayment(any(Payment.class));
+            verify(paymentRepository, times(2)).findById(1L);
+        }
+
+        @Test
+        @DisplayName("Returns to COMPLETED on refund failure")
+        void refundPayment_ProviderFailure_ReturnsToCompleted() {
+            payment.setPaymentStatus(PaymentStatus.COMPLETED);
+            payment.setTransactionId("TXN-123");
+
+            when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
+            when(paymentProvider.refundPayment(any(Payment.class)))
+                    .thenReturn(PaymentProviderResponse.failed("Provider unavailable"));
+            when(paymentRepository.save(any(Payment.class))).thenAnswer(i -> i.getArgument(0));
+
+            Payment result = paymentService.refundPayment(1L);
+
+            assertNotNull(result);
+            assertEquals(PaymentStatus.COMPLETED, result.getPaymentStatus());
         }
 
         @Test
         @DisplayName("Throws when refunding PENDING payment")
         void refundPayment_Pending_Throws() {
+            when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
+
+            assertThrows(InvalidPaymentStateException.class, () -> paymentService.refundPayment(1L));
+        }
+
+        @Test
+        @DisplayName("Throws when refunding already refunded payment")
+        void refundPayment_AlreadyRefunded_Throws() {
+            payment.setPaymentStatus(PaymentStatus.REFUNDED);
             when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
 
             assertThrows(InvalidPaymentStateException.class, () -> paymentService.refundPayment(1L));

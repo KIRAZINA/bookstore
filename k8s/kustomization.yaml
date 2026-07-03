@@ -41,6 +41,7 @@ resources:
   - networkpolicy.yaml
   - ingress.yaml
   - hpa.yaml
+  - resourcequota.yaml
 
 # === Common Labels ===
 # Applied to all resources for consistent labeling

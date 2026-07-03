@@ -96,11 +96,20 @@ public class KafkaConfig {
                 (ConsumerRecordRecoverer) (record, exception) -> {
                     log.error("Sending record to DLQ after retries exhausted: topic={}, partition={}, offset={}",
                             record.topic(), record.partition(), record.offset(), exception);
+                    int deliveryAttempt = 0;
+                    if (record.headers().lastHeader("kafka_deliveryAttempt") != null) {
+                        deliveryAttempt = Integer.parseInt(
+                                new String(record.headers().lastHeader("kafka_deliveryAttempt").value()));
+                    }
                     deadLetterService.sendToDlt(
                             record.topic(),
                             record.key() != null ? record.key().toString() : null,
                             record.value() != null ? record.value().toString() : null,
-                            exception);
+                            exception,
+                            record.partition(),
+                            record.offset(),
+                            null,
+                            deliveryAttempt);
                 },
                 backOff);
 
@@ -110,7 +119,6 @@ public class KafkaConfig {
                 IllegalArgumentException.class,
                 IllegalStateException.class);
 
-        handler.setSeekAfterError(false);
         return handler;
     }
 }

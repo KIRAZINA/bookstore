@@ -1,9 +1,5 @@
 package com.example.bookstore.config;
 
-import io.github.bucket4j.Bandwidth;
-import io.github.bucket4j.Bucket;
-
-import io.github.bucket4j.Refill;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -18,19 +14,25 @@ import org.springframework.core.annotation.Order;
 
 import java.io.IOException;
 import java.time.Duration;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Configuration
+@ConditionalOnProperty(name = "app.rate-limiting.enabled", havingValue = "true", matchIfMissing = true)
 public class RateLimitingConfig {
 
     private static final Logger log = LoggerFactory.getLogger(RateLimitingConfig.class);
 
+    static final Duration WINDOW = Duration.ofMinutes(1);
+
+    private final RedisRateLimiter redisRateLimiter;
+
+    public RateLimitingConfig(RedisRateLimiter redisRateLimiter) {
+        this.redisRateLimiter = redisRateLimiter;
+    }
+
     @Bean
-    @ConditionalOnProperty(name = "app.rate-limiting.enabled", havingValue = "true", matchIfMissing = true)
     public FilterRegistrationBean<RateLimitingFilter> rateLimitingFilter() {
         FilterRegistrationBean<RateLimitingFilter> registration = new FilterRegistrationBean<>();
-        registration.setFilter(new RateLimitingFilter());
+        registration.setFilter(new RateLimitingFilter(redisRateLimiter));
         registration.addUrlPatterns("/*");
         registration.setOrder(Ordered.HIGHEST_PRECEDENCE + 1);
         return registration;
@@ -39,7 +41,11 @@ public class RateLimitingConfig {
     @Order(Ordered.HIGHEST_PRECEDENCE + 1)
     public static class RateLimitingFilter implements Filter {
 
-        private final Map<String, Bucket> buckets = new ConcurrentHashMap<>();
+        private final RedisRateLimiter redisRateLimiter;
+
+        public RateLimitingFilter(RedisRateLimiter redisRateLimiter) {
+            this.redisRateLimiter = redisRateLimiter;
+        }
 
         @Override
         public void doFilter(ServletRequest servletRequest, ServletResponse servletResponse,
@@ -53,9 +59,9 @@ public class RateLimitingConfig {
             String method = request.getMethod();
             String key = clientIp + ":" + method + ":" + resolveLimitGroup(path);
 
-            Bucket bucket = buckets.computeIfAbsent(key, k -> createBucketForPath(path));
+            LimitConfig limit = getLimitForPath(path);
 
-            if (bucket.tryConsume(1)) {
+            if (redisRateLimiter.tryConsume(key, limit.limit(), WINDOW, 1)) {
                 filterChain.doFilter(request, response);
             } else {
                 response.setStatus(429);
@@ -69,35 +75,30 @@ public class RateLimitingConfig {
         }
 
         private String resolveLimitGroup(String path) {
-            if (path.startsWith("/api/auth/login") || path.startsWith("/api/auth/register")) {
+            if (path.startsWith("/api/v1/auth/login") || path.startsWith("/api/v1/auth/register")) {
                 return "auth";
             }
-            if (path.startsWith("/api/orders") || path.startsWith("/api/payments")) {
+            if (path.startsWith("/api/v1/orders") || path.startsWith("/api/v1/payments")) {
                 return "checkout";
             }
-            if (path.startsWith("/api/admin")) {
+            if (path.startsWith("/api/v1/admin")) {
                 return "admin";
             }
-            if (path.startsWith("/api")) {
+            if (path.startsWith("/api/v1/")) {
                 return "api";
             }
             return "default";
         }
 
-        private Bucket createBucketForPath(String path) {
+        private LimitConfig getLimitForPath(String path) {
             String group = resolveLimitGroup(path);
             return switch (group) {
-                case "auth" -> newBucket(5, 1);
-                case "checkout" -> newBucket(20, 10);
-                case "admin" -> newBucket(60, 30);
-                case "api" -> newBucket(100, 50);
-                default -> newBucket(200, 100);
+                case "auth" -> new LimitConfig(5, 60);
+                case "checkout" -> new LimitConfig(20, 60);
+                case "admin" -> new LimitConfig(60, 60);
+                case "api" -> new LimitConfig(100, 60);
+                default -> new LimitConfig(200, 60);
             };
-        }
-
-        private Bucket newBucket(int capacity, int refillPerMinute) {
-            Bandwidth limit = Bandwidth.classic(capacity, Refill.greedy(refillPerMinute, Duration.ofMinutes(1)));
-            return Bucket.builder().addLimit(limit).build();
         }
 
         private String getClientIp(HttpServletRequest request) {
@@ -111,5 +112,7 @@ public class RateLimitingConfig {
             }
             return request.getRemoteAddr();
         }
+
+        private record LimitConfig(int limit, int windowSeconds) {}
     }
 }

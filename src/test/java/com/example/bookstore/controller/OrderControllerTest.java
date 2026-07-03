@@ -46,23 +46,23 @@ class OrderControllerTest {
         when(orderService.createOrder())
                 .thenThrow(new ObjectOptimisticLockingFailureException("Book", 1L));
 
-        mockMvc.perform(post("/api/orders"))
+        mockMvc.perform(post("/api/v1/orders"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.message").value("Concurrent modification detected. Please retry."))
                 .andExpect(jsonPath("$.code").value("CONCURRENT_MODIFICATION"));
     }
 
     @Test
-    @DisplayName("POST /api/orders/{id}/cancel cancels own order")
+    @DisplayName("POST /api/v1/orders/{id}/cancel cancels own order")
     void cancelOwnOrder_Success() throws Exception {
         doNothing().when(orderService).cancelOwnOrder(1L);
 
-        mockMvc.perform(post("/api/orders/1/cancel"))
+        mockMvc.perform(post("/api/v1/orders/1/cancel"))
                 .andExpect(status().isOk());
     }
 
     @Test
-    @DisplayName("GET /api/orders/{id} returns order details")
+    @DisplayName("GET /api/v1/orders/{id} returns order details")
     void getOrder_Success() throws Exception {
         com.example.bookstore.model.Order order = new com.example.bookstore.model.Order();
         order.setId(1L);
@@ -75,7 +75,7 @@ class OrderControllerTest {
 
         when(orderService.getUserOrderById(1L)).thenReturn(order);
 
-        mockMvc.perform(get("/api/orders/1"))
+        mockMvc.perform(get("/api/v1/orders/1"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(1))
                 .andExpect(jsonPath("$.username").value("testuser"))

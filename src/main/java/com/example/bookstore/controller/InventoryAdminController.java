@@ -25,7 +25,7 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/admin/inventory")
+@RequestMapping("/api/v1/admin/inventory")
 @PreAuthorize("hasRole('ADMIN')")
 public class InventoryAdminController {
 

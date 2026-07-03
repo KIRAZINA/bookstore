@@ -1,0 +1,171 @@
+{
+  "__inputs": [],
+  "__requires": [],
+  "title": "Bookstore - Kubernetes Cluster Overview",
+  "description": "Kubernetes cluster health dashboard for Bookstore platform",
+  "uid": "bookstore-k8s-cluster",
+  "version": 1,
+  "schemaVersion": 39,
+  "tags": ["bookstore", "kubernetes", "production"],
+  "timezone": "utc",
+  "editable": false,
+  "panels": [
+    {
+      "title": "Cluster CPU Usage",
+      "type": "gauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(rate(container_cpu_usage_seconds_total{namespace=\"bookstore\"}[5m])) / sum(kube_pod_container_resource_limits_cpu_cores{namespace=\"bookstore\"}) * 100",
+          "legendFormat": "CPU Usage"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 0, "y": 0 }
+    },
+    {
+      "title": "Cluster Memory Usage",
+      "type": "gauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum(container_memory_working_set_bytes{namespace=\"bookstore\"}) / sum(kube_pod_container_resource_limits_memory_bytes{namespace=\"bookstore\"}) * 100",
+          "legendFormat": "Memory Usage"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 6, "y": 0 }
+    },
+    {
+      "title": "Pod Status",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "color": { "mode": "palette-classic" }
+        }
+      },
+      "targets": [
+        {
+          "expr": "count(kube_pod_status_phase{namespace=\"bookstore\", phase=\"Running\"})",
+          "legendFormat": "Running"
+        },
+        {
+          "expr": "count(kube_pod_status_phase{namespace=\"bookstore\", phase=\"Pending\"})",
+          "legendFormat": "Pending"
+        },
+        {
+          "expr": "count(kube_pod_status_phase{namespace=\"bookstore\", phase=\"Failed\"})",
+          "legendFormat": "Failed"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 0 }
+    },
+    {
+      "title": "Pod Restarts (24h)",
+      "type": "bargauge",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "none",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 3 },
+              { "color": "red", "value": 10 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "expr": "sum by(pod) (kube_pod_container_status_restarts_total{namespace=\"bookstore\"})",
+          "legendFormat": "{{ pod }}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 0 }
+    },
+    {
+      "title": "CPU Usage by Pod",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by(pod) (rate(container_cpu_usage_seconds_total{namespace=\"bookstore\"}[5m]))",
+          "legendFormat": "{{ pod }}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 }
+    },
+    {
+      "title": "Memory Usage by Pod",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by(pod) (container_memory_working_set_bytes{namespace=\"bookstore\"})",
+          "legendFormat": "{{ pod }}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 }
+    },
+    {
+      "title": "Network Traffic",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by(pod) (rate(container_network_receive_bytes_total{namespace=\"bookstore\"}[5m]))",
+          "legendFormat": "RX: {{ pod }}"
+        },
+        {
+          "expr": "sum by(pod) (rate(container_network_transmit_bytes_total{namespace=\"bookstore\"}[5m]))",
+          "legendFormat": "TX: {{ pod }}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 16 }
+    },
+    {
+      "title": "Disk I/O",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by(pod) (rate(container_fs_writes_bytes_total{namespace=\"bookstore\"}[5m]))",
+          "legendFormat": "Write: {{ pod }}"
+        },
+        {
+          "expr": "sum by(pod) (rate(container_fs_reads_bytes_total{namespace=\"bookstore\"}[5m]))",
+          "legendFormat": "Read: {{ pod }}"
+        }
+      ],
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 24 }
+    }
+  ]
+}

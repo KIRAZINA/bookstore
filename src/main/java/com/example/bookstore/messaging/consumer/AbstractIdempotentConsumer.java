@@ -1,5 +1,6 @@
 package com.example.bookstore.messaging.consumer;
 
+import com.example.bookstore.config.DeadLetterService;
 import com.example.bookstore.event.ProcessedEvent;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
@@ -7,6 +8,7 @@ import com.example.bookstore.messaging.EnvelopeConverter;
 import com.example.bookstore.messaging.metrics.MessagingMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.transaction.annotation.Transactional;
 
 public abstract class AbstractIdempotentConsumer {
@@ -16,13 +18,19 @@ public abstract class AbstractIdempotentConsumer {
     protected final ProcessedEventRepository processedEventRepository;
     protected final MessagingMetrics messagingMetrics;
     private final String consumerGroup;
+    private final DeadLetterService deadLetterService;
+    private final String topic;
 
     protected AbstractIdempotentConsumer(ProcessedEventRepository processedEventRepository,
                                           MessagingMetrics messagingMetrics,
-                                          String consumerGroup) {
+                                          String consumerGroup,
+                                          DeadLetterService deadLetterService,
+                                          String topic) {
         this.processedEventRepository = processedEventRepository;
         this.messagingMetrics = messagingMetrics;
         this.consumerGroup = consumerGroup;
+        this.deadLetterService = deadLetterService;
+        this.topic = topic;
     }
 
     @Transactional
@@ -31,7 +39,10 @@ public abstract class AbstractIdempotentConsumer {
         DomainEventEnvelope envelope = EnvelopeConverter.fromJson(message);
 
         String eventId = envelope.eventId().toString();
-        if (processedEventRepository.existsByEventIdAndConsumerGroup(eventId, consumerGroup)) {
+
+        try {
+            processedEventRepository.saveAndFlush(new ProcessedEvent(eventId, consumerGroup));
+        } catch (DataIntegrityViolationException e) {
             log.debug("Duplicate event skipped: type={}, eventId={}, consumer={}",
                     envelope.eventType(), eventId, consumerGroup);
             return;
@@ -39,7 +50,6 @@ public abstract class AbstractIdempotentConsumer {
 
         try {
             doProcess(envelope);
-            processedEventRepository.save(new ProcessedEvent(eventId, consumerGroup));
             messagingMetrics.recordEventConsumed();
             log.debug("Processed event: type={}, eventId={}, consumer={}",
                     envelope.eventType(), eventId, consumerGroup);

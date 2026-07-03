@@ -1,0 +1,59 @@
+# Profile for external load testing (k6) against docker-compose infrastructure.
+# Usage:
+#   docker-compose up -d
+#   mvn spring-boot:run -Dspring-boot.run.profiles=perf
+#   k6 run perf/k6/tests/02-load.js
+
+spring:
+  datasource:
+    url: ${DATASOURCE_URL:jdbc:postgresql://localhost:5432/bookstore}
+    username: ${DATASOURCE_USERNAME:bookstore}
+    password: ${DATASOURCE_PASSWORD:bookstore}
+    hikari:
+      maximum-pool-size: ${DB_POOL_MAX_SIZE:20}
+      minimum-idle: ${DB_POOL_MIN_IDLE:5}
+
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+
+  kafka:
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    listener:
+      concurrency: 5
+
+  cache:
+    type: redis
+
+app:
+  cache:
+    enabled: true
+  rate-limiting:
+    enabled: ${APP_RATE_LIMITING_ENABLED:false}
+  outbox:
+    poll-interval: 500
+    batch-size: 100
+
+management:
+  server:
+    port: ${MANAGEMENT_PORT:8081}
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      access: read_only
+
+jwt:
+  secret: ${JWT_SECRET:perf-jwt-secret-that-is-at-least-256-bits-long-for-hs256}
+  expiration: ${JWT_EXPIRATION:3600000}
+
+logging:
+  level:
+    root: INFO
+    com.example.bookstore: INFO
+    org.hibernate.SQL: WARN

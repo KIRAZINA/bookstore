@@ -1,0 +1,51 @@
+# Profile for JVM-based performance characterization tests (Testcontainers).
+# Activated alongside "test" via @ActiveProfiles({"test", "perf-test"}).
+# Rate limiting is disabled so measurements reflect application capacity, not throttling.
+
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: 30000
+
+  jpa:
+    properties:
+      jakarta.persistence.lock.timeout: 5000
+
+  cache:
+    type: redis
+
+  kafka:
+    listener:
+      concurrency: 3
+
+app:
+  cache:
+    enabled: true
+  rate-limiting:
+    enabled: false
+  outbox:
+    poll-interval: 500
+    batch-size: 100
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      show-details: always
+    prometheus:
+      access: read_only
+
+jwt:
+  secret: bookstore-perf-test-secret-key-that-is-long-enough-for-hs256
+  expiration: 3600000
+
+logging:
+  level:
+    root: WARN
+    com.example.bookstore: INFO
+    org.hibernate.SQL: WARN

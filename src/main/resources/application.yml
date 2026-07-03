@@ -33,6 +33,8 @@ spring:
       ddl-auto: none
     open-in-view: false
     show-sql: false
+    properties:
+      jakarta.persistence.lock.timeout: 5000
 
   mail:
     properties:
@@ -73,6 +75,10 @@ app:
     poll-interval: 1000
     max-retries: 5
     batch-size: 100
+    cleanup:
+      enabled: true
+      retention: 7d
+      cron: 0 0 3 * * ?
 
 management:
   endpoints:
@@ -114,6 +120,7 @@ jwt:
 server:
   port: 8080
   shutdown: graceful
+
   error:
     include-stacktrace: never
     include-exception: false
@@ -128,6 +135,8 @@ logging:
     io.opentelemetry: WARN
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} [%X{correlationId}] [%X{trace_id}] [%X{span_id}] - %msg%n"
+  structured:
+    format: logstash
 
 otel:
   service:

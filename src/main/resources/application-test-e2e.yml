@@ -1,0 +1,42 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:bookstore_e2e;DB_CLOSE_DELAY=-1;DB_CLOSE_ON_EXIT=FALSE;MODE=PostgreSQL
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    open-in-view: false
+    show-sql: false
+  autoconfigure:
+    exclude:
+      - org.springframework.boot.autoconfigure.data.redis.RedisAutoConfiguration
+      - org.springframework.boot.autoconfigure.data.redis.RedisReactiveAutoConfiguration
+      - org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration
+  flyway:
+    enabled: false
+  cache:
+    type: simple
+  kafka:
+    consumer:
+      auto-offset-reset: earliest
+    listener:
+      missing-topics-fatal: false
+app:
+  cache:
+    enabled: true
+  rate-limiting:
+    enabled: false
+jwt:
+  secret: bookstore-test-secret-key-that-is-long-enough-for-hs256
+  expiration: 3600000
+server:
+  port: 0
+  error:
+    include-stacktrace: never
+    include-exception: false
+    include-message: never
+    include-binding-errors: never
+logging:
+  pattern:
+    console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"

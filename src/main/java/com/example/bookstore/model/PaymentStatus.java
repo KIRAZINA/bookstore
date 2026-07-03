@@ -9,15 +9,17 @@ public enum PaymentStatus {
     COMPLETED,
     FAILED,
     CANCELLED,
+    REFUND_PROCESSING,
     REFUNDED;
 
     private static final Map<PaymentStatus, Set<PaymentStatus>> TRANSITIONS = Map.of(
-        PENDING,    Set.of(PROCESSING, CANCELLED),
-        PROCESSING, Set.of(COMPLETED, FAILED),
-        COMPLETED,  Set.of(REFUNDED),
-        FAILED,     Set.of(PENDING),
-        CANCELLED,  Set.of(),
-        REFUNDED,   Set.of()
+        PENDING,          Set.of(PROCESSING, CANCELLED),
+        PROCESSING,       Set.of(COMPLETED, FAILED),
+        COMPLETED,        Set.of(REFUND_PROCESSING),
+        REFUND_PROCESSING, Set.of(REFUNDED, FAILED, COMPLETED),
+        FAILED,           Set.of(PENDING),
+        CANCELLED,        Set.of(),
+        REFUNDED,         Set.of()
     );
 
     public boolean canTransitionTo(PaymentStatus target) {
@@ -25,6 +27,6 @@ public enum PaymentStatus {
     }
 
     public boolean isTerminal() {
-        return this == COMPLETED || this == CANCELLED || this == REFUNDED;
+        return this == CANCELLED || this == REFUNDED;
     }
 }

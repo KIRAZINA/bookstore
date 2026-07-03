@@ -1,0 +1,86 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: bookstore
+
+resources:
+  - ../../namespace.yaml
+  - ../../serviceaccount.yaml
+  - ../../configmap.yaml
+  - ../../secret.yaml
+  - ../../priorityclass.yaml
+  - ../../pdb.yaml
+  - ../../deployment.yaml
+  - ../../service.yaml
+  - ../../networkpolicy.yaml
+  - ../../ingress.yaml
+  - ../../hpa.yaml
+  - ../../resourcequota.yaml
+
+commonLabels:
+  app.kubernetes.io/name: bookstore
+  app.kubernetes.io/part-of: bookstore-platform
+  app.kubernetes.io/managed-by: kustomize
+  environment: staging
+
+commonAnnotations:
+  app.kubernetes.io/repository: "https://github.com/example/bookstore"
+
+images:
+  - name: bookstore
+    newName: your-registry/bookstore-api
+    newTag: latest
+
+patches:
+  - target:
+      kind: Deployment
+      name: bookstore
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 2
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/cpu
+        value: "1"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "1Gi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/cpu
+        value: "2"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "2Gi"
+  - target:
+      kind: ConfigMap
+      name: bookstore-config
+    patch: |-
+      - op: replace
+        path: /data/SPRING_PROFILES_ACTIVE
+        value: "staging"
+      - op: replace
+        path: /data/CORS_ALLOWED_ORIGINS
+        value: "https://staging.bookstore.example.com"
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: bookstore-hpa
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 2
+      - op: replace
+        path: /spec/maxReplicas
+        value: 10
+  - target:
+      kind: Ingress
+      name: bookstore-ingress
+    patch: |-
+      - op: replace
+        path: /spec/rules/0/host
+        value: api.staging.bookstore.example.com
+      - op: replace
+        path: /spec/tls/0/hosts/0
+        value: api.staging.bookstore.example.com
+      - op: replace
+        path: /spec/tls/0/secretName
+        value: bookstore-tls-staging

@@ -45,9 +45,64 @@ jobs:
     uses: ./.github/workflows/reusable-security.yml
     secrets: inherit
 
+  manifest-validate:
+    name: Kubernetes Manifest Validation
+    needs: [build-and-test]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Kustomize
+        uses: imranismail/setup-kustomize@v2
+
+      - name: Validate Base Kustomization
+        run: |
+          kustomize build k8s/ --enable-helm --load-restrictor=LoadRestrictionsNone > /dev/null
+          echo "Base kustomization build successful"
+
+      - name: Validate Dev Overlay
+        run: |
+          kustomize build k8s/overlays/dev/ --enable-helm --load-restrictor=LoadRestrictionsNone > /dev/null
+          echo "Dev overlay build successful"
+
+      - name: Validate Staging Overlay
+        run: |
+          kustomize build k8s/overlays/staging/ --enable-helm --load-restrictor=LoadRestrictionsNone > /dev/null
+          echo "Staging overlay build successful"
+
+      - name: Validate Prod Overlay
+        run: |
+          kustomize build k8s/overlays/prod/ --enable-helm --load-restrictor=LoadRestrictionsNone > /dev/null
+          echo "Prod overlay build successful"
+
+      - name: Validate Monitoring Kustomization
+        run: |
+          kustomize build k8s/monitoring/ --enable-helm --load-restrictor=LoadRestrictionsNone > /dev/null
+          echo "Monitoring kustomization build successful"
+
+      - name: Kubeconform Validation
+        uses: yannh/kubeconform-action@v1
+        with:
+          files: k8s/
+          skip:
+            - prometheuses.monitoring.coreos.com
+            - servicemonitors.monitoring.coreos.com
+            - externalsecrets.external-secrets.io
+          strict: true
+          verbose: 1
+
+      - name: Checkov Kubernetes Scan
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: k8s/
+          framework: kubernetes
+          quiet: true
+          skip_check: CKV_K8S_12,CKV_K8S_21
+
   docker-validate:
     name: Docker Image Validation
-    needs: [build-and-test]
+    needs: [build-and-test, manifest-validate]
     if: |
       github.event_name == 'push' &&
       (github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/release/'))
@@ -69,10 +124,26 @@ jobs:
           echo "Docker image built successfully:"
           docker images bookstore:ci
 
+      - name: Run Trivy Vulnerability Scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: bookstore:ci
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH'
+          exit-code: '1'
+
+      - name: Upload Trivy Scan Results
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-results.sarif'
+          category: 'trivy'
+
   quality-gate:
     name: Quality Gate Summary
     if: always()
-    needs: [static-analysis, build-and-test, security-scan]
+    needs: [static-analysis, build-and-test, security-scan, manifest-validate]
     runs-on: ubuntu-latest
     steps:
       - name: Check Static Analysis Status
@@ -91,6 +162,12 @@ jobs:
         if: needs.security-scan.result != 'success'
         run: |
           echo "Security Scan: ${{ needs.security-scan.result }}"
+          exit 1
+
+      - name: Check Manifest Validation Status
+        if: needs.manifest-validate.result != 'success'
+        run: |
+          echo "Manifest Validation: ${{ needs.manifest-validate.result }}"
           exit 1
 
       - name: All Quality Gates Passed

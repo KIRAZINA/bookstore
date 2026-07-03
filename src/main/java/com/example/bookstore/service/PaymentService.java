@@ -16,6 +16,7 @@ import com.example.bookstore.service.payment.PaymentProvider;
 import com.example.bookstore.service.payment.PaymentProviderResponse;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -76,10 +77,15 @@ public class PaymentService {
     }
 
     @WithSpan("PaymentService.processPayment")
-    @Transactional
     public Payment processPayment(Long orderId, String paymentMethod) {
+        Payment payment = initializeProcessing(orderId, paymentMethod);
+        PaymentProviderResponse providerResponse = paymentProvider.processPayment(payment);
+        return completeProcessing(payment, providerResponse);
+    }
+
+    @Transactional
+    protected Payment initializeProcessing(Long orderId, String paymentMethod) {
         Payment payment = getPaymentByOrderId(orderId);
-        Order order = payment.getOrder();
 
         if (!payment.getPaymentStatus().canTransitionTo(PaymentStatus.PROCESSING)) {
             throw new InvalidPaymentStateException(
@@ -91,13 +97,26 @@ public class PaymentService {
         payment.setUpdatedAt(LocalDateTime.now());
 
         businessMetrics.recordPaymentProcessed();
-        PaymentProviderResponse providerResponse = paymentProvider.processPayment(payment);
+        return paymentRepository.save(payment);
+    }
+
+    @Transactional
+    protected Payment completeProcessing(Payment payment, PaymentProviderResponse providerResponse) {
+        Order order = payment.getOrder();
         AppUser user = order.getUser();
 
+        Payment reloaded = paymentRepository.findById(payment.getId())
+                .orElseThrow(() -> new PaymentException("Payment not found: " + payment.getId()));
+
+        if (reloaded.getPaymentStatus() != PaymentStatus.PROCESSING) {
+            throw new InvalidPaymentStateException(
+                    "Payment status changed during processing: " + reloaded.getPaymentStatus());
+        }
+
         if (providerResponse.isSuccess()) {
-            payment.setTransactionId(providerResponse.getTransactionId());
-            payment.setCompletedAt(LocalDateTime.now());
-            payment.recordTransition(PaymentStatus.COMPLETED, "system", "Payment completed");
+            reloaded.setTransactionId(providerResponse.getTransactionId());
+            reloaded.setCompletedAt(LocalDateTime.now());
+            reloaded.recordTransition(PaymentStatus.COMPLETED, "system", "Payment completed");
 
             order.recordTransition(OrderStatus.PAID, "system", "Payment completed via " + paymentProvider.getName());
             orderRepository.save(order);
@@ -108,12 +127,12 @@ public class PaymentService {
             businessMetrics.recordPaymentCompleted();
 
             domainEventPublisher.publish(
-                    new PaymentCompletedEvent(payment.getId(), order.getId(), user.getId(), user.getUsername(),
-                            user.getEmail(), payment.getAmount(), payment.getTransactionId()),
-                    EventTypes.AGGREGATE_PAYMENT, String.valueOf(payment.getId()), EventTypes.PAYMENT_COMPLETED);
+                    new PaymentCompletedEvent(reloaded.getId(), order.getId(), user.getId(), user.getUsername(),
+                            user.getEmail(), reloaded.getAmount(), reloaded.getTransactionId()),
+                    EventTypes.AGGREGATE_PAYMENT, String.valueOf(reloaded.getId()), EventTypes.PAYMENT_COMPLETED);
         } else {
-            payment.setFailureReason(providerResponse.getFailureReason());
-            payment.recordTransition(PaymentStatus.FAILED, "system", providerResponse.getFailureReason());
+            reloaded.setFailureReason(providerResponse.getFailureReason());
+            reloaded.recordTransition(PaymentStatus.FAILED, "system", providerResponse.getFailureReason());
 
             inventoryService.releaseAllReservationsForOrder(
                     getOrderItemQuantities(order), order.getId(),
@@ -122,13 +141,13 @@ public class PaymentService {
             businessMetrics.recordPaymentFailed();
 
             domainEventPublisher.publish(
-                    new PaymentFailedEvent(payment.getId(), order.getId(), user.getId(), user.getUsername(),
-                            user.getEmail(), payment.getAmount(), providerResponse.getFailureReason()),
-                    EventTypes.AGGREGATE_PAYMENT, String.valueOf(payment.getId()), EventTypes.PAYMENT_FAILED);
+                    new PaymentFailedEvent(reloaded.getId(), order.getId(), user.getId(), user.getUsername(),
+                            user.getEmail(), reloaded.getAmount(), providerResponse.getFailureReason()),
+                    EventTypes.AGGREGATE_PAYMENT, String.valueOf(reloaded.getId()), EventTypes.PAYMENT_FAILED);
         }
 
-        payment.setUpdatedAt(LocalDateTime.now());
-        return paymentRepository.save(payment);
+        reloaded.setUpdatedAt(LocalDateTime.now());
+        return paymentRepository.save(reloaded);
     }
 
     @Transactional
@@ -146,39 +165,63 @@ public class PaymentService {
     }
 
     @WithSpan("PaymentService.refundPayment")
-    @Transactional
     public Payment refundPayment(Long paymentId) {
+        Payment payment = initializeRefund(paymentId);
+        PaymentProviderResponse providerResponse = paymentProvider.refundPayment(payment);
+        return completeRefund(payment, providerResponse);
+    }
+
+    @Transactional
+    protected Payment initializeRefund(Long paymentId) {
         Payment payment = getPaymentById(paymentId);
 
-        if (!payment.getPaymentStatus().canTransitionTo(PaymentStatus.REFUNDED)) {
+        if (!payment.getPaymentStatus().canTransitionTo(PaymentStatus.REFUND_PROCESSING)) {
             throw new InvalidPaymentStateException(
                     "Cannot refund payment in status: " + payment.getPaymentStatus());
         }
 
-        PaymentProviderResponse providerResponse = paymentProvider.refundPayment(payment);
-        AppUser user = payment.getOrder().getUser();
+        payment.recordTransition(PaymentStatus.REFUND_PROCESSING, "system", "Initializing refund");
+        payment.setUpdatedAt(LocalDateTime.now());
+        return paymentRepository.save(payment);
+    }
+
+    @Transactional
+    protected Payment completeRefund(Payment payment, PaymentProviderResponse providerResponse) {
+        Payment reloaded = paymentRepository.findById(payment.getId())
+                .orElseThrow(() -> new PaymentException("Payment not found: " + payment.getId()));
+
+        if (reloaded.getPaymentStatus() != PaymentStatus.REFUND_PROCESSING) {
+            throw new InvalidPaymentStateException(
+                    "Refund status changed during processing: " + reloaded.getPaymentStatus());
+        }
+
+        AppUser user = reloaded.getOrder().getUser();
 
         if (providerResponse.isSuccess()) {
-            payment.setTransactionId(providerResponse.getTransactionId());
-            payment.recordTransition(PaymentStatus.REFUNDED, "system", "Payment refunded");
+            reloaded.setTransactionId(providerResponse.getTransactionId());
+            reloaded.recordTransition(PaymentStatus.REFUNDED, "system", "Payment refunded");
 
             inventoryService.restoreAllStockForOrder(
-                    getOrderItemQuantities(payment.getOrder()), payment.getOrder().getId(),
+                    getOrderItemQuantities(reloaded.getOrder()), reloaded.getOrder().getId(),
                     "Stock restored after refund", "system");
 
             businessMetrics.recordPaymentRefunded();
 
             domainEventPublisher.publish(
-                    new PaymentRefundedEvent(payment.getId(), payment.getOrder().getId(), user.getId(), user.getUsername(),
-                            user.getEmail(), payment.getAmount(), payment.getTransactionId()),
-                    EventTypes.AGGREGATE_PAYMENT, String.valueOf(payment.getId()), EventTypes.PAYMENT_REFUNDED);
+                    new PaymentRefundedEvent(reloaded.getId(), reloaded.getOrder().getId(), user.getId(), user.getUsername(),
+                            user.getEmail(), reloaded.getAmount(), reloaded.getTransactionId()),
+                    EventTypes.AGGREGATE_PAYMENT, String.valueOf(reloaded.getId()), EventTypes.PAYMENT_REFUNDED);
         } else {
-            payment.setFailureReason(providerResponse.getFailureReason());
-            payment.recordTransition(PaymentStatus.FAILED, "system", "Refund failed: " + providerResponse.getFailureReason());
+            reloaded.setFailureReason(providerResponse.getFailureReason());
+            reloaded.recordTransition(PaymentStatus.COMPLETED, "system", "Refund failed, payment restored");
+
+            inventoryService.restoreAllStockForOrder(
+                    getOrderItemQuantities(reloaded.getOrder()), reloaded.getOrder().getId(),
+                    "Stock restored after refund failure", "system");
         }
 
-        payment.setUpdatedAt(LocalDateTime.now());
-        return paymentRepository.save(payment);
+        reloaded.setUpdatedAt(LocalDateTime.now());
+        return paymentRepository.save(reloaded);
     }
 
     public List<PaymentHistory> getPaymentHistory(Long paymentId) {

@@ -128,25 +128,22 @@ jobs:
       - name: Install Kustomize
         uses: imranismail/setup-kustomize@v2
 
-      - name: Set Image Tag in Kustomize
-        working-directory: k8s
+      - name: Set Image Tag in Environment Overlay
+        working-directory: k8s/overlays/${{ inputs.environment }}
         run: |
           kustomize edit set image \
             bookstore=${{ secrets.CONTAINER_REGISTRY }}/bookstore-api:${{ inputs.image-tag }}
-          kustomize edit set namespace bookstore
-          cat kustomization.yaml
 
-      - name: Validate Kubernetes Manifests
+      - name: Validate Environment Manifests
         run: |
-          kustomize build k8s/ --enable-helm --load-restrictor=LoadRestrictionsNone > /dev/null
-          echo "Kustomize build successful"
+          kustomize build k8s/overlays/${{ inputs.environment }}/ --enable-helm --load-restrictor=LoadRestrictionsNone > /dev/null
+          echo "Kustomize build successful for ${{ inputs.environment }}"
 
       - name: Validate with Kubeconform
         uses: yannh/kubeconform-action@v1
         with:
           files:
-            k8s/
-          # Skip validators for CRDs (Prometheus, ServiceMonitor, etc.)
+            k8s/overlays/${{ inputs.environment }}/
           skip:
             - prometheuses.monitoring.coreos.com
             - servicemonitors.monitoring.coreos.com
@@ -157,7 +154,7 @@ jobs:
       - name: Checkov Kubernetes Scan
         uses: bridgecrewio/checkov-action@v12
         with:
-          directory: k8s/
+          directory: k8s/overlays/${{ inputs.environment }}/
           framework: kubernetes
           quiet: true
           skip_check: CKV_K8S_12,CKV_K8S_21
@@ -167,17 +164,17 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: k8s-manifests-${{ inputs.environment }}
-          path: k8s/
+          path: k8s/overlays/${{ inputs.environment }}/
           retention-days: 7
 
   deploy:
-    name: Deploy to Kubernetes
+    name: Deploy to Kubernetes (${{ inputs.environment }})
     if: inputs.deploy-enabled
     needs: [docker-build-and-push, prepare-manifests]
     runs-on: ubuntu-latest
     environment:
       name: ${{ inputs.environment }}
-      url: https://api.bookstore.example.com
+      url: https://api.${{ inputs.environment }}.bookstore.example.com
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -185,8 +182,8 @@ jobs:
       - name: Install Kustomize
         uses: imranismail/setup-kustomize@v2
 
-      - name: Set Image Tag
-        working-directory: k8s
+      - name: Set Image Tag in Overlay
+        working-directory: k8s/overlays/${{ inputs.environment }}
         run: |
           kustomize edit set image \
             bookstore=${{ secrets.CONTAINER_REGISTRY }}/bookstore-api:${{ inputs.image-tag }}
@@ -202,9 +199,9 @@ jobs:
           export KUBECONFIG=kubeconfig
           kubectl cluster-info
 
-      - name: Apply Manifests
+      - name: Apply Manifests from Environment Overlay
         run: |
-          kustomize build k8s/ | kubectl apply -f -
+          kustomize build k8s/overlays/${{ inputs.environment }}/ | kubectl apply -f -
 
       - name: Verify Deployment Rollout
         run: |
@@ -219,13 +216,12 @@ jobs:
 
       - name: Post-Deployment Smoke Test
         run: |
-          # Basic health check through the ingress
           kubectl -n bookstore run smoke-test \
             --image=curlimages/curl:8.9.0 \
             --restart=Never \
             --command -- curl -s -o /dev/null -w "%{http_code}" \
             http://bookstore/actuator/health
-          kubectl -n bookstore wait --for=condition=Complete job/smoke-test --timeout=30s
+          kubectl -n bookstore wait --for=condition=Complete pod/smoke-test --timeout=30s
           kubectl -n bookstore logs smoke-test
           kubectl -n bookstore delete pod smoke-test
 
