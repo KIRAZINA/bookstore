@@ -189,7 +189,7 @@ jobs:
             bookstore=${{ secrets.CONTAINER_REGISTRY }}/bookstore-api:${{ inputs.image-tag }}
 
       - name: Configure kubectl
-        uses: azure/setup-kubectl@v4
+        uses: azure/setup-kubectl@v5
         with:
           version: 'latest'
 
