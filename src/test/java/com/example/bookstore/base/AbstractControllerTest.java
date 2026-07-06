@@ -51,7 +51,7 @@ public abstract class AbstractControllerTest extends AbstractIntegrationTest {
         String loginJson = """
                 {"username": "%s", "password": "%s"}
                 """.formatted(username, TEST_PASSWORD);
-        String response = mockMvc.perform(post("/api/auth/login")
+        String response = mockMvc.perform(post("/api/v1/auth/login")
                         .contentType("application/json")
                         .content(loginJson))
                 .andExpect(status().isOk())

@@ -34,7 +34,7 @@ public class RedisRateLimiter {
                     for i = 1, cost do
                         redis.call('ZADD', key, now, now .. ':' .. math.random())
                     end
-                    redis.call('EXPIRE', key, window)
+                    redis.call('PEXPIRE', key, window)
                     return 1
                 end
                 return 0

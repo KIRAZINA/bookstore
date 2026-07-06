@@ -18,7 +18,7 @@ spring:
       missing-topics-fatal: false
 
   datasource:
-    url: ${DATASOURCE_URL:jdbc:postgresql://localhost:5432/bookstore}
+    url: ${DATASOURCE_URL:jdbc:postgresql://localhost:5433/bookstore}
     username: ${DATASOURCE_USERNAME:bookstore}
     password: ${DATASOURCE_PASSWORD:bookstore}
     hikari:

@@ -33,7 +33,7 @@ class GlobalExceptionHandlerIntegrationTest extends AbstractControllerTest {
                 {"title": "", "author": "", "price": -1, "stock": -5}
                 """;
 
-        mockMvc.perform(post("/api/books")
+        mockMvc.perform(post("/api/v1/books")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType("application/json")
                         .content(invalidRequest))
@@ -43,7 +43,7 @@ class GlobalExceptionHandlerIntegrationTest extends AbstractControllerTest {
     @Test
     @DisplayName("Missing request body returns 400")
     void missingBody_ReturnsBadRequest() throws Exception {
-        mockMvc.perform(post("/api/books")
+        mockMvc.perform(post("/api/v1/books")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType("application/json"))
                 .andExpect(status().isBadRequest());
@@ -52,7 +52,7 @@ class GlobalExceptionHandlerIntegrationTest extends AbstractControllerTest {
     @Test
     @DisplayName("Resource not found returns appropriate error")
     void deleteNonExistentBook_ReturnsError() throws Exception {
-        mockMvc.perform(delete("/api/books/99999")
+        mockMvc.perform(delete("/api/v1/books/99999")
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isNoContent());
     }
@@ -60,7 +60,7 @@ class GlobalExceptionHandlerIntegrationTest extends AbstractControllerTest {
     @Test
     @DisplayName("Unauthenticated requests to protected endpoints return 403")
     void unauthenticatedRequest_Returns401() throws Exception {
-        mockMvc.perform(get("/api/cart"))
+        mockMvc.perform(get("/api/v1/cart"))
                 .andExpect(status().isForbidden());
     }
 }

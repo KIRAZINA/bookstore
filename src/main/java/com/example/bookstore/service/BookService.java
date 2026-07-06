@@ -2,6 +2,8 @@ package com.example.bookstore.service;
 
 import com.example.bookstore.model.Book;
 import com.example.bookstore.repository.BookRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -55,6 +57,12 @@ public class BookService {
         return bookRepository.findByCategory(category);
     }
 
+    @Cacheable(cacheNames = "bookById", key = "#id")
+    public Book getBookById(Long id) {
+        return bookRepository.findById(id)
+                .orElseThrow(() -> new IllegalArgumentException("Book not found: " + id));
+    }
+
     @Cacheable(cacheNames = "books", key = "'search-' + #search")
     public List<Book> searchBooks(String search) {
         return bookRepository.findByTitleOrAuthor(search);
@@ -69,11 +77,18 @@ public class BookService {
 
     @Transactional
     public Book updateStock(Long bookId, int stock) {
+        if (stock < 0) {
+            throw new IllegalArgumentException("Stock cannot be negative");
+        }
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new IllegalArgumentException("Book not found"));
         inventoryAdminService.adjustInventory(bookId, stock,
                 "Admin stock update via BookService.updateStock");
-        Book saved = bookRepository.findById(bookId).orElseThrow();
+        book.setStock(stock);
+        Book saved = bookRepository.save(book);
+        if (saved == null) {
+            saved = book;
+        }
         evictBooksCache();
         evictBookByIdCache();
         return saved;
@@ -83,25 +98,35 @@ public class BookService {
         return inventoryService.getAvailableQuantity(bookId);
     }
 
+    private static final Logger log = LoggerFactory.getLogger(BookService.class);
+
     private void evictBooksCache() {
-        if (redisTemplate != null) {
-            Set<String> keys = redisTemplate.keys(BOOKS_PREFIX + "*");
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
+        try {
+            if (redisTemplate != null) {
+                Set<String> keys = redisTemplate.keys(BOOKS_PREFIX + "*");
+                if (keys != null && !keys.isEmpty()) {
+                    redisTemplate.delete(keys);
+                }
+            } else {
+                Objects.requireNonNull(cacheManager.getCache("books")).clear();
             }
-        } else {
-            Objects.requireNonNull(cacheManager.getCache("books")).clear();
+        } catch (RuntimeException e) {
+            log.warn("Failed to evict books cache: {}", e.getMessage());
         }
     }
 
     private void evictBookByIdCache() {
-        if (redisTemplate != null) {
-            Set<String> keys = redisTemplate.keys(BOOK_BY_ID_PREFIX + "*");
-            if (keys != null && !keys.isEmpty()) {
-                redisTemplate.delete(keys);
+        try {
+            if (redisTemplate != null) {
+                Set<String> keys = redisTemplate.keys(BOOK_BY_ID_PREFIX + "*");
+                if (keys != null && !keys.isEmpty()) {
+                    redisTemplate.delete(keys);
+                }
+            } else {
+                Objects.requireNonNull(cacheManager.getCache("bookById")).clear();
             }
-        } else {
-            Objects.requireNonNull(cacheManager.getCache("bookById")).clear();
+        } catch (RuntimeException e) {
+            log.warn("Failed to evict bookById cache: {}", e.getMessage());
         }
     }
 }

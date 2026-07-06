@@ -31,7 +31,7 @@ class SecurityIntegrationTest extends AbstractControllerTest {
     @Test
     @DisplayName("Public GET /api/books is accessible without authentication")
     void publicEndpoint_NoAuth_ReturnsOk() throws Exception {
-        mockMvc.perform(get("/api/books"))
+        mockMvc.perform(get("/api/v1/books"))
                 .andExpect(status().isOk());
     }
 
@@ -42,7 +42,7 @@ class SecurityIntegrationTest extends AbstractControllerTest {
                 {"title": "Book", "author": "Auth", "price": 10.00, "stock": 5}
                 """;
 
-        mockMvc.perform(post("/api/books")
+        mockMvc.perform(post("/api/v1/books")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType("application/json")
                         .content(request))
@@ -56,7 +56,7 @@ class SecurityIntegrationTest extends AbstractControllerTest {
                 {"title": "Admin Book", "author": "Admin", "price": 20.00, "category": "Test", "stock": 3}
                 """;
 
-        mockMvc.perform(post("/api/books")
+        mockMvc.perform(post("/api/v1/books")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType("application/json")
                         .content(request))
@@ -66,14 +66,14 @@ class SecurityIntegrationTest extends AbstractControllerTest {
     @Test
     @DisplayName("Cart endpoints require USER role")
     void cartEndpoint_NoAuth_ReturnsUnauthorized() throws Exception {
-        mockMvc.perform(get("/api/cart"))
+        mockMvc.perform(get("/api/v1/cart"))
                 .andExpect(status().isForbidden());
     }
 
     @Test
     @DisplayName("Invalid JWT token returns 401")
     void invalidToken_ReturnsUnauthorized() throws Exception {
-        mockMvc.perform(get("/api/cart")
+        mockMvc.perform(get("/api/v1/cart")
                         .header("Authorization", "Bearer invalid.token.here"))
                 .andExpect(status().isForbidden());
     }
@@ -81,7 +81,7 @@ class SecurityIntegrationTest extends AbstractControllerTest {
     @Test
     @DisplayName("Order endpoints require USER role")
     void orderEndpoint_UserRole_ReturnsOk() throws Exception {
-        mockMvc.perform(get("/api/orders")
+        mockMvc.perform(get("/api/v1/orders")
                         .header("Authorization", "Bearer " + userToken))
                 .andExpect(status().isOk());
     }

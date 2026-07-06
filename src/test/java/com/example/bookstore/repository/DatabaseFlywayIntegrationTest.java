@@ -4,19 +4,17 @@ import com.example.bookstore.base.AbstractIntegrationTest;
 import com.example.bookstore.model.Book;
 import com.example.bookstore.model.Inventory;
 import jakarta.persistence.EntityManager;
+import jakarta.validation.ConstraintViolationException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@Transactional
 class DatabaseFlywayIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
@@ -38,10 +36,10 @@ class DatabaseFlywayIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Unique constraint violation throws DataIntegrityViolationException")
-    void duplicateBookTitle_ThrowsDataIntegrityViolation() {
+    @DisplayName("Books with the same title are allowed (no unique constraint on title)")
+    void duplicateBookTitle_IsAllowed() {
         Book book = new Book();
-        book.setTitle("Unique Title");
+        book.setTitle("Shared Title");
         book.setAuthor("Author");
         book.setPrice(new BigDecimal("10.00"));
         book.setCategory("Test");
@@ -49,26 +47,27 @@ class DatabaseFlywayIntegrationTest extends AbstractIntegrationTest {
         bookRepository.saveAndFlush(book);
 
         Book duplicate = new Book();
-        duplicate.setTitle("Unique Title");
+        duplicate.setTitle("Shared Title");
         duplicate.setAuthor("Another Author");
         duplicate.setPrice(new BigDecimal("15.00"));
         duplicate.setCategory("Test");
         duplicate.setStock(3);
 
-        assertThrows(DataIntegrityViolationException.class, () ->
-                bookRepository.saveAndFlush(duplicate));
+        Book saved = bookRepository.saveAndFlush(duplicate);
+        assertNotNull(saved.getId());
+        assertNotEquals(book.getId(), saved.getId());
     }
 
     @Test
     @DisplayName("NOT NULL constraint violation on required field")
-    void nullTitle_ThrowsDataIntegrityViolation() {
+    void nullTitle_ThrowsConstraintViolation() {
         Book book = new Book();
         book.setAuthor("Author");
         book.setPrice(new BigDecimal("10.00"));
         book.setCategory("Test");
         book.setStock(5);
 
-        assertThrows(DataIntegrityViolationException.class, () ->
+        assertThrows(ConstraintViolationException.class, () ->
                 bookRepository.saveAndFlush(book));
     }
 

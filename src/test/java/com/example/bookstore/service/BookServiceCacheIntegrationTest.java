@@ -1,12 +1,20 @@
 package com.example.bookstore.service;
 
+import com.example.bookstore.model.AppUser;
 import com.example.bookstore.model.Book;
+import com.example.bookstore.model.Inventory;
+import com.example.bookstore.model.UserRole;
 import com.example.bookstore.repository.BookRepository;
+import com.example.bookstore.repository.InventoryRepository;
+import com.example.bookstore.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.boot.autoconfigure.EnableAutoConfiguration;
 import org.springframework.boot.data.redis.autoconfigure.DataRedisAutoConfiguration;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -36,15 +44,34 @@ class BookServiceCacheIntegrationTest {
     @Autowired
     private CacheManager cacheManager;
 
+    @Autowired
+    private InventoryRepository inventoryRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     @MockitoSpyBean
     private BookRepository bookRepository;
 
     private Book testBook;
+    private AppUser adminUser;
 
     @BeforeEach
     void setUp() {
         cacheManager.getCacheNames().forEach(name ->
                 Objects.requireNonNull(cacheManager.getCache(name)).clear());
+
+        adminUser = userRepository.findByUsername("admin").orElseGet(() -> {
+            AppUser user = new AppUser();
+            user.setUsername("admin");
+            user.setPassword(passwordEncoder.encode("password"));
+            user.setRole(UserRole.ROLE_ADMIN);
+            user.setEmail("admin@test.com");
+            return userRepository.save(user);
+        });
 
         testBook = new Book();
         testBook.setTitle("Cache Test Book");
@@ -54,6 +81,9 @@ class BookServiceCacheIntegrationTest {
         testBook.setCategory("TestCategory");
 
         bookRepository.deleteAll();
+
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(adminUser, null, adminUser.getAuthorities()));
     }
 
     @Nested
@@ -202,6 +232,7 @@ class BookServiceCacheIntegrationTest {
         @DisplayName("Updating stock should evict books and bookById caches")
         void updateStock_EvictsCaches() {
             Book saved = bookRepository.save(testBook);
+            inventoryRepository.save(new Inventory(saved.getId(), testBook.getStock()));
 
             bookService.getBooksByCategory("TestCategory");
             verify(bookRepository, times(1)).findByCategory("TestCategory");

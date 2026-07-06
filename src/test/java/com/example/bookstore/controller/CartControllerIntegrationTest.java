@@ -2,7 +2,9 @@ package com.example.bookstore.controller;
 
 import com.example.bookstore.base.AbstractControllerTest;
 import com.example.bookstore.model.Book;
+import com.example.bookstore.model.Inventory;
 import com.example.bookstore.repository.BookRepository;
+import com.example.bookstore.repository.InventoryRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -19,12 +21,16 @@ class CartControllerIntegrationTest extends AbstractControllerTest {
     @Autowired
     private BookRepository bookRepository;
 
+    @Autowired
+    private InventoryRepository inventoryRepository;
+
     private String token;
     private Book availableBook;
 
     @BeforeEach
     void setUp() throws Exception {
         bookRepository.deleteAll();
+        inventoryRepository.deleteAll();
         token = registerUserAndGetToken("cart-user-" + System.nanoTime());
 
         availableBook = new Book();
@@ -34,12 +40,14 @@ class CartControllerIntegrationTest extends AbstractControllerTest {
         availableBook.setCategory("Test");
         availableBook.setStock(10);
         availableBook = bookRepository.save(availableBook);
+
+        inventoryRepository.save(new Inventory(availableBook.getId(), 10));
     }
 
     @Test
     @DisplayName("GET /api/cart returns empty cart for new user")
     void getCart_ReturnsEmptyCart() throws Exception {
-        mockMvc.perform(get("/api/cart")
+        mockMvc.perform(get("/api/v1/cart")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items", hasSize(0)));
@@ -52,7 +60,7 @@ class CartControllerIntegrationTest extends AbstractControllerTest {
                 {"bookId": %d, "quantity": 2}
                 """.formatted(availableBook.getId());
 
-        mockMvc.perform(post("/api/cart/items")
+        mockMvc.perform(post("/api/v1/cart/items")
                         .header("Authorization", "Bearer " + token)
                         .contentType("application/json")
                         .content(request))
@@ -69,7 +77,7 @@ class CartControllerIntegrationTest extends AbstractControllerTest {
                 {"bookId": %d, "quantity": 1}
                 """.formatted(availableBook.getId());
 
-        mockMvc.perform(post("/api/cart/items")
+        mockMvc.perform(post("/api/v1/cart/items")
                 .header("Authorization", "Bearer " + token)
                 .contentType("application/json")
                 .content(addRequest));
@@ -78,7 +86,7 @@ class CartControllerIntegrationTest extends AbstractControllerTest {
                 {"quantity": 5}
                 """;
 
-        mockMvc.perform(put("/api/cart/items/" + availableBook.getId())
+        mockMvc.perform(put("/api/v1/cart/items/" + availableBook.getId())
                         .header("Authorization", "Bearer " + token)
                         .contentType("application/json")
                         .content(updateRequest))
@@ -93,12 +101,12 @@ class CartControllerIntegrationTest extends AbstractControllerTest {
                 {"bookId": %d, "quantity": 1}
                 """.formatted(availableBook.getId());
 
-        mockMvc.perform(post("/api/cart/items")
+        mockMvc.perform(post("/api/v1/cart/items")
                 .header("Authorization", "Bearer " + token)
                 .contentType("application/json")
                 .content(addRequest));
 
-        mockMvc.perform(delete("/api/cart/items/" + availableBook.getId())
+        mockMvc.perform(delete("/api/v1/cart/items/" + availableBook.getId())
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.items", hasSize(0)));
@@ -111,12 +119,12 @@ class CartControllerIntegrationTest extends AbstractControllerTest {
                 {"bookId": %d, "quantity": 1}
                 """.formatted(availableBook.getId());
 
-        mockMvc.perform(post("/api/cart/items")
+        mockMvc.perform(post("/api/v1/cart/items")
                 .header("Authorization", "Bearer " + token)
                 .contentType("application/json")
                 .content(addRequest));
 
-        mockMvc.perform(delete("/api/cart")
+        mockMvc.perform(delete("/api/v1/cart")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isNoContent());
     }

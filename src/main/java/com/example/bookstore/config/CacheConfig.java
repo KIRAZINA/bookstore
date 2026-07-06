@@ -30,7 +30,6 @@ import java.util.Map;
 
 @Configuration
 @EnableCaching
-@EnableRetry
 @ConditionalOnProperty(name = "app.cache.enabled", havingValue = "true", matchIfMissing = true)
 public class CacheConfig implements CachingConfigurer {
 
@@ -48,6 +47,7 @@ public class CacheConfig implements CachingConfigurer {
                 .allowIfSubType("com.example.bookstore.model.")
                 .allowIfSubType("java.util.")
                 .allowIfSubType("java.time.")
+                .allowIfSubType("java.math.")
                 .build();
 
         ObjectMapper mapper = new ObjectMapper();
@@ -104,6 +104,11 @@ public class CacheConfig implements CachingConfigurer {
 
     @Override
     public CacheErrorHandler errorHandler() {
+        return cacheErrorHandler();
+    }
+
+    @Bean
+    public CacheErrorHandler cacheErrorHandler() {
         return new CacheErrorHandler() {
             @Override
             public void handleCacheGetError(RuntimeException exception, Cache cache, Object key) {

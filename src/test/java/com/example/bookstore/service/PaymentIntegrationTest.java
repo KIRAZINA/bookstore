@@ -79,6 +79,8 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
 
         Inventory inventory = new Inventory(book.getId(), 10);
         inventoryRepository.save(inventory);
+
+        when(paymentProvider.getName()).thenReturn("DUMMY");
     }
 
     @Test

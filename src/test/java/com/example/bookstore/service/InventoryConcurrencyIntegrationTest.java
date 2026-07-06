@@ -172,7 +172,7 @@ class InventoryConcurrencyIntegrationTest extends AbstractIntegrationTest {
     void releaseExcess_ThrowsValidationError() {
         inventoryService.reserve(book.getId(), 3, 1L, "user");
 
-        assertThrows(IllegalArgumentException.class, () ->
+        assertThrows(IllegalStateException.class, () ->
                 inventoryService.releaseReservation(book.getId(), 5, 1L, "Excess release", "user"));
 
         Inventory inventory = inventoryRepository.findByBookId(book.getId()).orElseThrow();

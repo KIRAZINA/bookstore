@@ -15,7 +15,7 @@ spring:
     locations: classpath:db/migration
 
   cache:
-    type: none
+    type: simple
 
 app:
   cache:

@@ -5,14 +5,17 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.IdClass;
 import jakarta.persistence.Table;
+import jakarta.persistence.Transient;
 import java.io.Serializable;
 import java.time.Instant;
 import java.util.Objects;
 
+import org.springframework.data.domain.Persistable;
+
 @Entity
 @Table(name = "processed_events")
 @IdClass(ProcessedEvent.ProcessedEventId.class)
-public class ProcessedEvent {
+public class ProcessedEvent implements Persistable<ProcessedEvent.ProcessedEventId> {
 
     @Id
     @Column(name = "event_id", length = 100)
@@ -25,12 +28,28 @@ public class ProcessedEvent {
     @Column(name = "processed_at", nullable = false)
     private Instant processedAt;
 
-    protected ProcessedEvent() {}
+    @Transient
+    private boolean isNew = true;
+
+    protected ProcessedEvent() {
+        this.isNew = false;
+    }
 
     public ProcessedEvent(String eventId, String consumerGroup) {
         this.eventId = eventId;
         this.consumerGroup = consumerGroup;
         this.processedAt = Instant.now();
+        this.isNew = true;
+    }
+
+    @Override
+    public ProcessedEventId getId() {
+        return new ProcessedEventId(eventId, consumerGroup);
+    }
+
+    @Override
+    public boolean isNew() {
+        return isNew;
     }
 
     public String getEventId() { return eventId; }

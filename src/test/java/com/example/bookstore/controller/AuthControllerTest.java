@@ -58,7 +58,7 @@ class AuthControllerTest {
             request.setPassword("password123");
             request.setEmail("test@example.com");
 
-            mockMvc.perform(post("/api/auth/register")
+            mockMvc.perform(post("/api/v1/auth/register")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
@@ -85,7 +85,7 @@ class AuthControllerTest {
             request.setPassword("password123");
             request.setEmail("new@example.com");
 
-            mockMvc.perform(post("/api/auth/register")
+            mockMvc.perform(post("/api/v1/auth/register")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest())
@@ -100,7 +100,7 @@ class AuthControllerTest {
             request.setPassword("password123");
             request.setEmail("test@example.com");
 
-            mockMvc.perform(post("/api/auth/register")
+            mockMvc.perform(post("/api/v1/auth/register")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest());
@@ -114,7 +114,7 @@ class AuthControllerTest {
             request.setPassword("password123");
             request.setEmail("not-an-email");
 
-            mockMvc.perform(post("/api/auth/register")
+            mockMvc.perform(post("/api/v1/auth/register")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest());
@@ -128,11 +128,11 @@ class AuthControllerTest {
             request.setPassword("12345");
             request.setEmail("test@example.com");
 
-            mockMvc.perform(post("/api/auth/register")
+            mockMvc.perform(post("/api/v1/auth/register")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest())
-                    .andExpect(jsonPath("$.password").exists());
+                    .andExpect(jsonPath("$.fieldErrors[0].field").value("password"));
         }
 
         @Test
@@ -143,7 +143,7 @@ class AuthControllerTest {
             request.setPassword("password123");
             request.setEmail(null);
 
-            mockMvc.perform(post("/api/auth/register")
+            mockMvc.perform(post("/api/v1/auth/register")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
@@ -173,7 +173,7 @@ class AuthControllerTest {
             request.setUsername("logintest");
             request.setPassword("password123");
 
-            mockMvc.perform(post("/api/auth/login")
+            mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
@@ -189,7 +189,7 @@ class AuthControllerTest {
             request.setUsername("logintest");
             request.setPassword("wrongpassword");
 
-            mockMvc.perform(post("/api/auth/login")
+            mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isUnauthorized());
@@ -202,7 +202,7 @@ class AuthControllerTest {
             request.setUsername("nonexistent");
             request.setPassword("password123");
 
-            mockMvc.perform(post("/api/auth/login")
+            mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isUnauthorized());
@@ -215,7 +215,7 @@ class AuthControllerTest {
             request.setUsername("");
             request.setPassword("password123");
 
-            mockMvc.perform(post("/api/auth/login")
+            mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest());
@@ -228,7 +228,7 @@ class AuthControllerTest {
             request.setUsername("logintest");
             request.setPassword("");
 
-            mockMvc.perform(post("/api/auth/login")
+            mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest());
@@ -237,7 +237,7 @@ class AuthControllerTest {
         @Test
         @DisplayName("Логін - без тіла запиту")
         void login_EmptyBody() throws Exception {
-            mockMvc.perform(post("/api/auth/login")
+            mockMvc.perform(post("/api/v1/auth/login")
                             .contentType(MediaType.APPLICATION_JSON))
                     .andExpect(status().isBadRequest());
         }

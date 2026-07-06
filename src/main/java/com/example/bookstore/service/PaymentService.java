@@ -77,6 +77,7 @@ public class PaymentService {
     }
 
     @WithSpan("PaymentService.processPayment")
+    @Transactional
     public Payment processPayment(Long orderId, String paymentMethod) {
         Payment payment = initializeProcessing(orderId, paymentMethod);
         PaymentProviderResponse providerResponse = paymentProvider.processPayment(payment);
@@ -165,6 +166,7 @@ public class PaymentService {
     }
 
     @WithSpan("PaymentService.refundPayment")
+    @Transactional
     public Payment refundPayment(Long paymentId) {
         Payment payment = initializeRefund(paymentId);
         PaymentProviderResponse providerResponse = paymentProvider.refundPayment(payment);
@@ -214,10 +216,6 @@ public class PaymentService {
         } else {
             reloaded.setFailureReason(providerResponse.getFailureReason());
             reloaded.recordTransition(PaymentStatus.COMPLETED, "system", "Refund failed, payment restored");
-
-            inventoryService.restoreAllStockForOrder(
-                    getOrderItemQuantities(reloaded.getOrder()), reloaded.getOrder().getId(),
-                    "Stock restored after refund failure", "system");
         }
 
         reloaded.setUpdatedAt(LocalDateTime.now());

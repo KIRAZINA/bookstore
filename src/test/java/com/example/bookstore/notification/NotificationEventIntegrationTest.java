@@ -6,6 +6,7 @@ import com.example.bookstore.notification.model.EmailLog;
 import com.example.bookstore.notification.model.EmailStatus;
 import com.example.bookstore.notification.repository.EmailLogRepository;
 import com.example.bookstore.repository.BookRepository;
+import com.example.bookstore.repository.InventoryRepository;
 import com.example.bookstore.repository.UserRepository;
 import com.example.bookstore.service.CartService;
 import com.example.bookstore.service.OrderService;
@@ -44,6 +45,9 @@ class NotificationEventIntegrationTest extends AbstractIntegrationTest {
     private BookRepository bookRepository;
 
     @Autowired
+    private InventoryRepository inventoryRepository;
+
+    @Autowired
     private EmailLogRepository emailLogRepository;
 
     @Autowired
@@ -75,6 +79,8 @@ class NotificationEventIntegrationTest extends AbstractIntegrationTest {
         book.setCategory("Test");
         book.setStock(10);
         book = bookRepository.save(book);
+
+        inventoryRepository.save(new Inventory(book.getId(), 10));
     }
 
     @AfterEach

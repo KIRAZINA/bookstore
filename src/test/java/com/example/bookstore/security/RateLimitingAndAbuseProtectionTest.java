@@ -1,25 +1,23 @@
 package com.example.bookstore.security;
 
-import com.example.bookstore.base.AbstractIntegrationTest;
+import com.example.bookstore.base.AbstractControllerTest;
 import com.example.bookstore.model.Book;
 import com.example.bookstore.repository.BookRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.test.web.reactive.server.WebTestClient;
 
 import java.math.BigDecimal;
-import java.time.Duration;
+
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @DisplayName("Rate Limiting & Abuse Protection Tests")
-class RateLimitingAndAbuseProtectionTest extends AbstractIntegrationTest {
+class RateLimitingAndAbuseProtectionTest extends AbstractControllerTest {
 
     @Autowired
     private BookRepository bookRepository;
-
-    @Autowired
-    private WebTestClient webTestClient;
 
     @BeforeEach
     void setUp() {
@@ -35,11 +33,10 @@ class RateLimitingAndAbuseProtectionTest extends AbstractIntegrationTest {
 
     @Test
     @DisplayName("Burst requests are allowed initially")
-    void burstRequests_AllowedInitially() {
+    void burstRequests_AllowedInitially() throws Exception {
         for (int i = 0; i < 10; i++) {
-            webTestClient.get().uri("/api/v1/books")
-                    .exchange()
-                    .expectStatus().isOk();
+            mockMvc.perform(get("/api/v1/books"))
+                    .andExpect(status().isOk());
         }
     }
 }

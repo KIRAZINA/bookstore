@@ -10,6 +10,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.cache.CacheManager;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.math.BigDecimal;
 import java.util.Arrays;
@@ -32,6 +35,15 @@ class BookServiceTest {
     @Mock
     private InventoryAdminService inventoryAdminService;
 
+    @Mock
+    private CacheManager cacheManager;
+
+    @Mock
+    private org.springframework.cache.Cache cache;
+
+    @Mock
+    private ObjectProvider<StringRedisTemplate> redisTemplateProvider;
+
     @InjectMocks
     private BookService bookService;
 
@@ -39,6 +51,8 @@ class BookServiceTest {
 
     @BeforeEach
     void setUp() {
+        lenient().when(cacheManager.getCache("books")).thenReturn(cache);
+        lenient().when(cacheManager.getCache("bookById")).thenReturn(cache);
         testBook = new Book();
         testBook.setId(1L);
         testBook.setTitle("Test Book");
@@ -158,13 +172,23 @@ class BookServiceTest {
         @Test
         @DisplayName("Успішне оновлення stock")
         void updateStock_Success() {
-            when(bookRepository.findById(1L)).thenReturn(Optional.of(testBook));
-            when(bookRepository.save(any(Book.class))).thenReturn(testBook);
+            Book updatedBook = new Book();
+            updatedBook.setId(1L);
+            updatedBook.setTitle("Test Book");
+            updatedBook.setAuthor("Test Author");
+            updatedBook.setPrice(new BigDecimal("29.99"));
+            updatedBook.setStock(50);
+            updatedBook.setCategory("Programming");
+
+            when(bookRepository.findById(1L))
+                    .thenReturn(Optional.of(testBook))
+                    .thenReturn(Optional.of(updatedBook));
 
             Book result = bookService.updateStock(1L, 50);
 
             assertNotNull(result);
             assertEquals(50, result.getStock());
+            verify(inventoryAdminService).adjustInventory(1L, 50, "Admin stock update via BookService.updateStock");
         }
 
         @Test
@@ -178,8 +202,6 @@ class BookServiceTest {
         @Test
         @DisplayName("Від'ємний stock - помилка")
         void updateStock_NegativeStock() {
-            when(bookRepository.findById(1L)).thenReturn(Optional.of(testBook));
-
             assertThrows(IllegalArgumentException.class, () -> bookService.updateStock(1L, -1));
         }
     }

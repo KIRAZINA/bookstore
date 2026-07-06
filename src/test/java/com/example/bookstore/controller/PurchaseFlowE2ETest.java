@@ -82,6 +82,8 @@ class PurchaseFlowE2ETest extends AbstractE2ETest {
         cartRepository.deleteAll();
         bookRepository.deleteAll();
 
+        when(paymentProvider.getName()).thenReturn("DUMMY");
+
         adminToken = registerAdminAndGetToken("e2e-admin-" + System.nanoTime());
 
         String username = "e2e-user-" + System.nanoTime();
@@ -319,7 +321,7 @@ class PurchaseFlowE2ETest extends AbstractE2ETest {
 
         Order order = orderRepository.findById(orderId).orElseThrow();
         assertEquals(OrderStatus.PAID, order.getStatus());
-        assertEquals(new BigDecimal("149.95"), order.getTotalPrice());
+        assertEquals(0, new BigDecimal("149.95").compareTo(order.getTotalPrice()));
 
         Payment payment = paymentRepository.findByOrderId(orderId).orElseThrow();
         assertEquals(PaymentStatus.COMPLETED, payment.getPaymentStatus());

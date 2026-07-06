@@ -7,6 +7,7 @@ import com.example.bookstore.service.OrderService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.CacheManager;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.boot.webmvc.test.autoconfigure.WebMvcTest;
@@ -39,6 +40,9 @@ class OrderControllerTest {
 
     @MockitoBean
     private BusinessMetrics businessMetrics;
+
+    @MockitoBean
+    private CacheManager cacheManager;
 
     @Test
     @DisplayName("POST /api/orders returns 409 on optimistic lock conflict")

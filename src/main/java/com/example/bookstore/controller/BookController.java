@@ -53,6 +53,12 @@ public class BookController {
         return bookService.searchBooks(search).stream().map(this::toBookResponse).collect(Collectors.toList());
     }
 
+    @GetMapping("/{id}")
+    public ResponseEntity<BookResponse> getBookById(@PathVariable Long id) {
+        Book book = bookService.getBookById(id);
+        return ResponseEntity.ok(toBookResponse(book));
+    }
+
     @PostMapping
     @PreAuthorize("hasRole('ADMIN')")
     public ResponseEntity<BookResponse> addBook(@Valid @RequestBody BookRequest request) {

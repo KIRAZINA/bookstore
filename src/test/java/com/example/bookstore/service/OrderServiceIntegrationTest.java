@@ -3,6 +3,7 @@ package com.example.bookstore.service;
 import com.example.bookstore.config.SecurityUtils;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.BookRepository;
+import com.example.bookstore.repository.InventoryRepository;
 import com.example.bookstore.repository.OrderRepository;
 import com.example.bookstore.repository.OrderStatusHistoryRepository;
 import com.example.bookstore.repository.PaymentRepository;
@@ -40,6 +41,9 @@ class OrderServiceIntegrationTest {
     private BookRepository bookRepository;
 
     @Autowired
+    private InventoryRepository inventoryRepository;
+
+    @Autowired
     private OrderRepository orderRepository;
 
     @Autowired
@@ -67,7 +71,9 @@ class OrderServiceIntegrationTest {
         book.setPrice(price);
         book.setCategory("Testing");
         book.setStock(stock);
-        return bookRepository.save(book);
+        book = bookRepository.save(book);
+        inventoryRepository.save(new Inventory(book.getId(), stock));
+        return book;
     }
 
     private Order createOrder(AppUser user, Book book, int quantity) {
@@ -97,8 +103,8 @@ class OrderServiceIntegrationTest {
         assertEquals(new BigDecimal("20.00"), item.getSubtotal());
         assertEquals(new BigDecimal("20.00"), createdOrder.getTotalPrice());
 
-        Book updatedBook = bookRepository.findById(book.getId()).orElseThrow();
-        assertEquals(8, updatedBook.getStock());
+        Inventory inventory = inventoryRepository.findByBookId(book.getId()).orElseThrow();
+        assertEquals(8, inventory.getAvailableQuantity());
     }
 
     @Test

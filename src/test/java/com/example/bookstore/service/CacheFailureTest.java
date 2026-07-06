@@ -1,12 +1,21 @@
 package com.example.bookstore.service;
 
+import com.example.bookstore.model.AppUser;
 import com.example.bookstore.model.Book;
+import com.example.bookstore.model.Inventory;
+import com.example.bookstore.model.UserRole;
 import com.example.bookstore.repository.BookRepository;
+import com.example.bookstore.repository.InventoryRepository;
+import com.example.bookstore.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -37,6 +46,15 @@ class CacheFailureTest {
     @Autowired
     private BookRepository bookRepository;
 
+    @Autowired
+    private InventoryRepository inventoryRepository;
+
+    @Autowired
+    private UserRepository userRepository;
+
+    @Autowired
+    private PasswordEncoder passwordEncoder;
+
     @BeforeEach
     void setUp() {
         bookRepository.deleteAll();
@@ -46,7 +64,19 @@ class CacheFailureTest {
         book.setPrice(new BigDecimal("9.99"));
         book.setCategory("Test");
         book.setStock(10);
-        bookRepository.save(book);
+        book = bookRepository.save(book);
+        inventoryRepository.save(new Inventory(book.getId(), 10));
+
+        userRepository.deleteAll();
+        AppUser admin = new AppUser();
+        admin.setUsername("cache-fail-admin-" + System.nanoTime());
+        admin.setPassword(passwordEncoder.encode("admin"));
+        admin.setEmail("cache-fail@test.com");
+        admin.setRole(UserRole.ROLE_ADMIN);
+        admin = userRepository.save(admin);
+
+        SecurityContextHolder.getContext().setAuthentication(
+                new UsernamePasswordAuthenticationToken(admin, null, admin.getAuthorities()));
     }
 
     @Test
@@ -103,6 +133,7 @@ class CacheFailureTest {
         toDelete.setCategory("C");
         toDelete.setStock(1);
         Book saved = bookRepository.save(toDelete);
+        inventoryRepository.save(new Inventory(saved.getId(), 1));
 
         assertDoesNotThrow(() -> bookService.deleteBook(saved.getId()));
         assertFalse(bookRepository.findById(saved.getId()).isPresent());
@@ -118,9 +149,12 @@ class CacheFailureTest {
         stockBook.setCategory("C");
         stockBook.setStock(1);
         Book saved = bookRepository.save(stockBook);
+        inventoryRepository.save(new Inventory(saved.getId(), 1));
 
         Book updated = bookService.updateStock(saved.getId(), 100);
 
         assertEquals(100, updated.getStock());
+        Inventory inv = inventoryRepository.findByBookId(saved.getId()).orElseThrow();
+        assertEquals(100, inv.getAvailableQuantity());
     }
 }

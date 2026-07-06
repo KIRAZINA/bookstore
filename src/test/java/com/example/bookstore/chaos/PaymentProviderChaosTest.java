@@ -13,7 +13,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.UUID;
@@ -22,7 +21,6 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
 @SpringBootTest
-@Transactional
 @ActiveProfiles("test")
 @DisplayName("Payment provider chaos tests — failure handling and idempotency")
 class PaymentProviderChaosTest {
@@ -43,6 +41,9 @@ class PaymentProviderChaosTest {
     private BookRepository bookRepository;
 
     @Autowired
+    private InventoryRepository inventoryRepository;
+
+    @Autowired
     private OrderRepository orderRepository;
 
     @MockitoBean
@@ -58,6 +59,7 @@ class PaymentProviderChaosTest {
     void setUp() {
         orderRepository.deleteAll();
         bookRepository.deleteAll();
+        inventoryRepository.deleteAll();
         userRepository.deleteAll();
 
         testUser = new AppUser();
@@ -75,6 +77,10 @@ class PaymentProviderChaosTest {
         testBook.setStock(100);
         testBook = bookRepository.save(testBook);
 
+        Inventory inventory = new Inventory(testBook.getId(), testBook.getStock());
+        inventoryRepository.save(inventory);
+
+        when(paymentProvider.getName()).thenReturn("DUMMY");
         when(securityUtils.getCurrentUser()).thenReturn(testUser);
     }
 

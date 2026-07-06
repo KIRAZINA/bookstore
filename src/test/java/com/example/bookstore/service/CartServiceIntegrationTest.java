@@ -1,13 +1,11 @@
 package com.example.bookstore.service;
 
 import com.example.bookstore.config.SecurityUtils;
-import com.example.bookstore.model.AppUser;
-import com.example.bookstore.model.Book;
-import com.example.bookstore.model.Cart;
-import com.example.bookstore.model.UserRole;
+import com.example.bookstore.model.*;
 import com.example.bookstore.repository.BookRepository;
 import com.example.bookstore.repository.CartItemRepository;
 import com.example.bookstore.repository.CartRepository;
+import com.example.bookstore.repository.InventoryRepository;
 import com.example.bookstore.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,6 +37,9 @@ class CartServiceIntegrationTest {
     private BookRepository bookRepository;
 
     @Autowired
+    private InventoryRepository inventoryRepository;
+
+    @Autowired
     private CartRepository cartRepository;
 
     @Autowired
@@ -64,6 +65,7 @@ class CartServiceIntegrationTest {
         book.setCategory("IT");
         book.setStock(10);
         book = bookRepository.save(book);
+        inventoryRepository.save(new Inventory(book.getId(), 10));
 
         when(securityUtils.getCurrentUser()).thenReturn(user);
 

@@ -3,6 +3,7 @@ package com.example.bookstore.controller;
 import com.example.bookstore.base.AbstractControllerTest;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.BookRepository;
+import com.example.bookstore.repository.InventoryRepository;
 import com.example.bookstore.service.CartService;
 import com.example.bookstore.service.OrderService;
 import org.junit.jupiter.api.AfterEach;
@@ -23,6 +24,9 @@ class PaymentControllerIntegrationTest extends AbstractControllerTest {
 
     @Autowired
     private BookRepository bookRepository;
+
+    @Autowired
+    private InventoryRepository inventoryRepository;
 
     @Autowired
     private CartService cartService;
@@ -52,6 +56,8 @@ class PaymentControllerIntegrationTest extends AbstractControllerTest {
         book.setStock(10);
         book = bookRepository.save(book);
 
+        inventoryRepository.save(new Inventory(book.getId(), 10));
+
         cartService.addToCart(book.getId(), 2);
         Order order = orderService.createOrder();
         orderId = order.getId();
@@ -65,7 +71,7 @@ class PaymentControllerIntegrationTest extends AbstractControllerTest {
     @Test
     @DisplayName("GET /api/payments/{orderId} returns payment details")
     void getPayment_ReturnsPayment() throws Exception {
-        mockMvc.perform(get("/api/payments/" + orderId)
+        mockMvc.perform(get("/api/v1/payments/" + orderId)
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paymentStatus").value("PENDING"))
@@ -79,7 +85,7 @@ class PaymentControllerIntegrationTest extends AbstractControllerTest {
                 {"paymentMethod": "CREDIT_CARD"}
                 """;
 
-        mockMvc.perform(post("/api/payments/" + orderId + "/process")
+        mockMvc.perform(post("/api/v1/payments/" + orderId + "/process")
                         .header("Authorization", "Bearer " + token)
                         .contentType("application/json")
                         .content(request))
@@ -91,7 +97,7 @@ class PaymentControllerIntegrationTest extends AbstractControllerTest {
     @Test
     @DisplayName("POST /api/payments/{orderId}/cancel cancels pending payment")
     void cancelPayment_Success() throws Exception {
-        mockMvc.perform(post("/api/payments/" + orderId + "/cancel")
+        mockMvc.perform(post("/api/v1/payments/" + orderId + "/cancel")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paymentStatus").value("CANCELLED"));
@@ -103,12 +109,12 @@ class PaymentControllerIntegrationTest extends AbstractControllerTest {
         String request = """
                 {"paymentMethod": "CREDIT_CARD"}
                 """;
-        mockMvc.perform(post("/api/payments/" + orderId + "/process")
+        mockMvc.perform(post("/api/v1/payments/" + orderId + "/process")
                 .header("Authorization", "Bearer " + token)
                 .contentType("application/json")
                 .content(request));
 
-        mockMvc.perform(get("/api/payments/" + orderId + "/history")
+        mockMvc.perform(get("/api/v1/payments/" + orderId + "/history")
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(greaterThanOrEqualTo(1))));
@@ -117,10 +123,10 @@ class PaymentControllerIntegrationTest extends AbstractControllerTest {
     @Test
     @DisplayName("Payment endpoints reject unauthenticated requests")
     void paymentEndpoints_Unauthenticated_Returns401() throws Exception {
-        mockMvc.perform(get("/api/payments/" + orderId))
+        mockMvc.perform(get("/api/v1/payments/" + orderId))
                 .andExpect(status().isForbidden());
 
-        mockMvc.perform(post("/api/payments/" + orderId + "/process")
+        mockMvc.perform(post("/api/v1/payments/" + orderId + "/process")
                         .contentType("application/json")
                         .content("{\"paymentMethod\": \"CARD\"}"))
                 .andExpect(status().isForbidden());

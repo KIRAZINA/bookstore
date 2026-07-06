@@ -4,6 +4,7 @@ import com.example.bookstore.config.SecurityUtils;
 import com.example.bookstore.exception.InvalidPaymentStateException;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.*;
+import com.example.bookstore.service.InventoryAdminService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -48,6 +49,9 @@ class PaymentServiceIntegrationTest {
     @MockitoBean
     private SecurityUtils securityUtils;
 
+    @Autowired
+    private InventoryAdminService inventoryAdminService;
+
     private AppUser createUser() {
         AppUser user = new AppUser();
         user.setUsername("pay-it-" + UUID.randomUUID());
@@ -64,7 +68,9 @@ class PaymentServiceIntegrationTest {
         book.setPrice(price);
         book.setCategory("Testing");
         book.setStock(stock);
-        return bookRepository.save(book);
+        Book saved = bookRepository.save(book);
+        inventoryAdminService.initializeInventory(saved.getId(), stock);
+        return saved;
     }
 
     private Order createOrder(AppUser user, Book book, int quantity) {
@@ -200,9 +206,10 @@ class PaymentServiceIntegrationTest {
         assertEquals(PaymentStatus.REFUNDED, refunded.getPaymentStatus());
 
         List<PaymentHistory> history = paymentService.getPaymentHistory(payment.getId());
-        assertEquals(3, history.size());
+        assertEquals(4, history.size());
         assertEquals(PaymentStatus.PROCESSING, history.get(0).getNewStatus());
         assertEquals(PaymentStatus.COMPLETED, history.get(1).getNewStatus());
-        assertEquals(PaymentStatus.REFUNDED, history.get(2).getNewStatus());
+        assertEquals(PaymentStatus.REFUND_PROCESSING, history.get(2).getNewStatus());
+        assertEquals(PaymentStatus.REFUNDED, history.get(3).getNewStatus());
     }
 }

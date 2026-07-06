@@ -86,7 +86,7 @@ class InputValidationAndInjectionTest extends AbstractControllerTest {
         void sqlInjectionSearchEndpoint_Neutralized() throws Exception {
             String maliciousQuery = "' OR '1'='1";
             mockMvc.perform(get("/api/v1/books/search")
-                            .param("query", maliciousQuery))
+                            .param("search", maliciousQuery))
                     .andExpect(status().isOk());
         }
 

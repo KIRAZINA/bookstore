@@ -40,7 +40,7 @@ class BookControllerIntegrationTest extends AbstractControllerTest {
         book.setStock(7);
         bookRepository.save(book);
 
-        mockMvc.perform(get("/api/books"))
+        mockMvc.perform(get("/api/v1/books"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].title").value("REST Book"))
@@ -67,12 +67,12 @@ class BookControllerIntegrationTest extends AbstractControllerTest {
         science.setStock(3);
         bookRepository.save(science);
 
-        mockMvc.perform(get("/api/books/category").param("category", "Fiction"))
+        mockMvc.perform(get("/api/v1/books/category").param("category", "Fiction"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(1)))
                 .andExpect(jsonPath("$[0].title").value("Fiction Book"));
 
-        mockMvc.perform(get("/api/books/category").param("category", "NonExistent"))
+        mockMvc.perform(get("/api/v1/books/category").param("category", "NonExistent"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSize(0)));
     }
@@ -84,7 +84,7 @@ class BookControllerIntegrationTest extends AbstractControllerTest {
                 {"title": "New Book", "author": "New Author", "price": 25.00, "category": "New", "stock": 10}
                 """;
 
-        mockMvc.perform(post("/api/books")
+        mockMvc.perform(post("/api/v1/books")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType("application/json")
                         .content(request))
@@ -100,7 +100,7 @@ class BookControllerIntegrationTest extends AbstractControllerTest {
                 {"title": "New Book", "author": "Author", "price": 10.00, "category": "Test", "stock": 5}
                 """;
 
-        mockMvc.perform(post("/api/books")
+        mockMvc.perform(post("/api/v1/books")
                         .header("Authorization", "Bearer " + userToken)
                         .contentType("application/json")
                         .content(request))
@@ -114,7 +114,7 @@ class BookControllerIntegrationTest extends AbstractControllerTest {
                 {"title": "", "author": "", "price": -1, "stock": -5}
                 """;
 
-        mockMvc.perform(post("/api/books")
+        mockMvc.perform(post("/api/v1/books")
                         .header("Authorization", "Bearer " + adminToken)
                         .contentType("application/json")
                         .content(request))
@@ -132,7 +132,7 @@ class BookControllerIntegrationTest extends AbstractControllerTest {
         book.setStock(1);
         book = bookRepository.save(book);
 
-        mockMvc.perform(delete("/api/books/" + book.getId())
+        mockMvc.perform(delete("/api/v1/books/" + book.getId())
                         .header("Authorization", "Bearer " + adminToken))
                 .andExpect(status().isNoContent());
     }

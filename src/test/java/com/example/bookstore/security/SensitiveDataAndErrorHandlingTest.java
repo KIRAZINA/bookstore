@@ -27,8 +27,9 @@ class SensitiveDataAndErrorHandlingTest extends AbstractControllerTest {
     @Test
     @DisplayName("Error responses don't expose stack traces")
     void errorResponses_DoNotExposeStackTraces() throws Exception {
-        mockMvc.perform(get("/api/v1/books/9999999"))
-                .andExpect(status().isNotFound())
+        mockMvc.perform(get("/api/v1/books/9999999")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.stackTrace").doesNotExist());
     }
 
@@ -36,6 +37,7 @@ class SensitiveDataAndErrorHandlingTest extends AbstractControllerTest {
     @DisplayName("Error responses use proper HTTP status codes")
     void errorResponses_UseProperStatusCodes() throws Exception {
         mockMvc.perform(post("/api/v1/books")
+                        .header("Authorization", "Bearer " + adminToken)
                         .contentType("application/json")
                         .content("{invalid}"))
                 .andExpect(status().isBadRequest());
