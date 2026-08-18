@@ -24,13 +24,12 @@ class AuthenticationSecurityTest extends AbstractControllerTest {
     private UserRepository userRepository;
 
     private String validUserToken;
-    private String validAdminToken;
 
     @BeforeEach
     void setUp() throws Exception {
         userRepository.deleteAll();
         validUserToken = registerUserAndGetToken("auth-test-user-" + System.nanoTime());
-        validAdminToken = registerAdminAndGetToken("auth-test-admin-" + System.nanoTime());
+        registerAdminAndGetToken("auth-test-admin-" + System.nanoTime());
     }
 
     @Nested

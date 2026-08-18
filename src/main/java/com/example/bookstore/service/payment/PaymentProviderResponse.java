@@ -3,14 +3,14 @@ package com.example.bookstore.service.payment;
 import com.example.bookstore.model.PaymentStatus;
 
 public class PaymentProviderResponse {
-    private boolean success;
+    private boolean successful;
     private String transactionId;
     private String failureReason;
     private PaymentStatus newStatus;
 
     public static PaymentProviderResponse success(String transactionId, PaymentStatus newStatus) {
         PaymentProviderResponse r = new PaymentProviderResponse();
-        r.success = true;
+        r.successful = true;
         r.transactionId = transactionId;
         r.newStatus = newStatus;
         return r;
@@ -18,14 +18,14 @@ public class PaymentProviderResponse {
 
     public static PaymentProviderResponse failed(String failureReason) {
         PaymentProviderResponse r = new PaymentProviderResponse();
-        r.success = false;
+        r.successful = false;
         r.failureReason = failureReason;
         r.newStatus = PaymentStatus.FAILED;
         return r;
     }
 
-    public boolean isSuccess() { return success; }
-    public void setSuccess(boolean success) { this.success = success; }
+    public boolean isSuccess() { return successful; }
+    public void setSuccess(boolean success) { this.successful = success; }
     public String getTransactionId() { return transactionId; }
     public void setTransactionId(String transactionId) { this.transactionId = transactionId; }
     public String getFailureReason() { return failureReason; }

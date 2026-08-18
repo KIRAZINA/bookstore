@@ -1,6 +1,10 @@
 package com.example.bookstore.model;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -9,6 +13,9 @@ import java.util.List;
 
 @Entity
 @Table(name = "payment")
+@Getter
+@Setter
+@NoArgsConstructor
 public class Payment {
 
     @Id
@@ -20,14 +27,14 @@ public class Payment {
     private Order order;
 
     @Column(name = "payment_provider", nullable = false)
-    private String paymentProvider = "DUMMY";
+    private String paymentProvider;
 
     @Column(name = "payment_method")
     private String paymentMethod;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "payment_status", nullable = false)
-    private PaymentStatus paymentStatus = PaymentStatus.PENDING;
+    private PaymentStatus paymentStatus;
 
     @Column(nullable = false, precision = 19, scale = 4)
     private BigDecimal amount;
@@ -62,8 +69,6 @@ public class Payment {
     @OneToMany(mappedBy = "payment", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private List<PaymentHistory> history = new ArrayList<>();
 
-    public Payment() {}
-
     public Payment(Order order, String paymentProvider, PaymentStatus paymentStatus, BigDecimal amount) {
         this.order = order;
         this.paymentProvider = paymentProvider;
@@ -95,33 +100,5 @@ public class Payment {
         return historyEntry;
     }
 
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-    public Order getOrder() { return order; }
-    public void setOrder(Order order) { this.order = order; }
-    public String getPaymentProvider() { return paymentProvider; }
-    public void setPaymentProvider(String paymentProvider) { this.paymentProvider = paymentProvider; }
-    public String getPaymentMethod() { return paymentMethod; }
-    public void setPaymentMethod(String paymentMethod) { this.paymentMethod = paymentMethod; }
-    public PaymentStatus getPaymentStatus() { return paymentStatus; }
-    public void setPaymentStatus(PaymentStatus paymentStatus) { this.paymentStatus = paymentStatus; }
-    public BigDecimal getAmount() { return amount; }
-    public void setAmount(BigDecimal amount) { this.amount = amount; }
-    public String getCurrency() { return currency; }
-    public void setCurrency(String currency) { this.currency = currency; }
-    public String getTransactionId() { return transactionId; }
-    public void setTransactionId(String transactionId) { this.transactionId = transactionId; }
-    public String getExternalPaymentId() { return externalPaymentId; }
-    public void setExternalPaymentId(String externalPaymentId) { this.externalPaymentId = externalPaymentId; }
-    public String getPaymentReference() { return paymentReference; }
-    public void setPaymentReference(String paymentReference) { this.paymentReference = paymentReference; }
-    public String getFailureReason() { return failureReason; }
-    public void setFailureReason(String failureReason) { this.failureReason = failureReason; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
-    public LocalDateTime getCompletedAt() { return completedAt; }
-    public void setCompletedAt(LocalDateTime completedAt) { this.completedAt = completedAt; }
     public List<PaymentHistory> getHistory() { return Collections.unmodifiableList(history); }
 }

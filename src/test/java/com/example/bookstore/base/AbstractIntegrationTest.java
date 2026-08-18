@@ -6,11 +6,8 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.utility.DockerImageName;
 
-@Testcontainers
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
 @ActiveProfiles("test")
 public abstract class AbstractIntegrationTest {
@@ -18,17 +15,20 @@ public abstract class AbstractIntegrationTest {
     private static final DockerImageName POSTGRES_IMAGE = DockerImageName.parse("postgres:16-alpine");
     private static final DockerImageName REDIS_IMAGE = DockerImageName.parse("redis:7-alpine");
 
-    @Container
-    static PostgreSQLContainer<?> postgres = new PostgreSQLContainer<>(POSTGRES_IMAGE)
-            .withDatabaseName("bookstore_test")
-            .withUsername("test")
-            .withPassword("test")
-            .withReuse(true);
+    private static final PostgreSQLContainer<?> postgres;
+    private static final GenericContainer<?> redis;
 
-    @Container
-    static GenericContainer<?> redis = new GenericContainer<>(REDIS_IMAGE)
-            .withExposedPorts(6379)
-            .withReuse(true);
+    static {
+        postgres = new PostgreSQLContainer<>(POSTGRES_IMAGE)
+                .withDatabaseName("bookstore_test")
+                .withUsername("test")
+                .withPassword("test");
+        postgres.start();
+
+        redis = new GenericContainer<>(REDIS_IMAGE)
+                .withExposedPorts(6379);
+        redis.start();
+    }
 
     @DynamicPropertySource
     static void configureProperties(DynamicPropertyRegistry registry) {

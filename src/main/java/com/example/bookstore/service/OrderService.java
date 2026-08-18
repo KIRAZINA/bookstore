@@ -71,7 +71,6 @@ public class OrderService {
     @Transactional
     public Order createOrder() {
         long start = System.currentTimeMillis();
-        AppUser user = securityUtils.getCurrentUser();
         Cart cart = cartService.getCart();
 
         if (cart.getItems().isEmpty()) {
@@ -86,6 +85,7 @@ public class OrderService {
             }
         }
 
+        AppUser user = securityUtils.getCurrentUser();
         Order order = new Order();
         order.setUser(user);
         order.setStatus(OrderStatus.PENDING);
@@ -133,7 +133,7 @@ public class OrderService {
 
     public Page<Order> getUserOrders(int page, int size, String sortBy, String direction) {
         AppUser user = securityUtils.getCurrentUser();
-        Sort sort = Sort.by(direction.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC, sortBy);
+        Sort sort = Sort.by("asc".equalsIgnoreCase(direction) ? Sort.Direction.ASC : Sort.Direction.DESC, sortBy);
         Pageable pageable = PageRequest.of(page, size, sort);
         return orderRepository.findByUserId(user.getId(), pageable);
     }
@@ -171,7 +171,7 @@ public class OrderService {
     }
 
     public Page<Order> getAllOrders(int page, int size, String sortBy, String direction, OrderStatus status) {
-        Sort sort = Sort.by(direction.equalsIgnoreCase("asc") ? Sort.Direction.ASC : Sort.Direction.DESC, sortBy);
+        Sort sort = Sort.by("asc".equalsIgnoreCase(direction) ? Sort.Direction.ASC : Sort.Direction.DESC, sortBy);
         Pageable pageable = PageRequest.of(page, size, sort);
         if (status != null) {
             return orderRepository.findByStatus(status, pageable);

@@ -26,6 +26,7 @@ public class BookService {
 
     private static final String BOOKS_PREFIX = "books::";
     private static final String BOOK_BY_ID_PREFIX = "bookById::";
+    private static final Logger log = LoggerFactory.getLogger(BookService.class);
 
     public BookService(BookRepository bookRepository,
                        CacheManager cacheManager,
@@ -97,8 +98,6 @@ public class BookService {
     public int getAvailableQuantity(Long bookId) {
         return inventoryService.getAvailableQuantity(bookId);
     }
-
-    private static final Logger log = LoggerFactory.getLogger(BookService.class);
 
     private void evictBooksCache() {
         try {

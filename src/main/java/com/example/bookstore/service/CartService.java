@@ -44,7 +44,6 @@ public class CartService {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
-        Cart cart = getCart();
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new IllegalArgumentException("Book not found"));
         int available = inventoryService.getAvailableQuantity(bookId);
@@ -54,6 +53,7 @@ public class CartService {
                 ". Available: " + available + ", Requested: " + quantity);
         }
 
+        Cart cart = getCart();
         Optional<CartItem> existingItem = cart.getItems().stream()
                 .filter(item -> item.getBook().getId().equals(bookId))
                 .findFirst();
@@ -75,7 +75,6 @@ public class CartService {
         if (quantity <= 0) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
-        Cart cart = getCart();
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new IllegalArgumentException("Book not found"));
         int available = inventoryService.getAvailableQuantity(bookId);
@@ -85,6 +84,7 @@ public class CartService {
                 ". Available: " + available + ", Requested: " + quantity);
         }
 
+        Cart cart = getCart();
         CartItem item = cart.getItems().stream()
                 .filter(i -> i.getBook().getId().equals(bookId))
                 .findFirst()

@@ -34,7 +34,7 @@ public class SmtpEmailSender implements EmailSender {
             mailSender.send(message);
             log.info("Email sent to {}: {}", to, subject);
         } catch (MessagingException e) {
-            throw new RuntimeException("Failed to send email to " + to, e);
+            throw new IllegalStateException("Failed to send email to " + to, e);
         }
     }
 }

@@ -38,7 +38,7 @@ public class EmailTemplateEngine {
             String content = new String(resource.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
             templates.put(name, content);
         } catch (IOException e) {
-            throw new RuntimeException("Failed to load email template: " + name, e);
+            throw new IllegalStateException("Failed to load email template: " + name, e);
         }
     }
 

@@ -8,6 +8,7 @@ public class RegisterResponse {
     private String email;
     private UserRole role;
 
+    /** No-arg constructor required for JSON deserialization. */
     public RegisterResponse() {}
 
     public RegisterResponse(Long id, String username, String email, UserRole role) {

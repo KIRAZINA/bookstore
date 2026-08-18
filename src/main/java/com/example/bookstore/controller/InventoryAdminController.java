@@ -6,6 +6,7 @@ import com.example.bookstore.controller.dto.InventoryResponse;
 import com.example.bookstore.model.Inventory;
 import com.example.bookstore.model.InventoryHistory;
 import com.example.bookstore.model.InventoryStatus;
+import com.example.bookstore.model.Book;
 import com.example.bookstore.repository.BookRepository;
 import com.example.bookstore.service.InventoryAdminService;
 import com.example.bookstore.service.InventoryValidator;
@@ -97,7 +98,7 @@ public class InventoryAdminController {
 
     private InventoryResponse toResponse(Inventory inv) {
         String bookTitle = bookRepository.findById(inv.getBookId())
-                .map(b -> b.getTitle())
+                .map(Book::getTitle)
                 .orElse("Unknown");
         return new InventoryResponse(
                 inv.getBookId(),

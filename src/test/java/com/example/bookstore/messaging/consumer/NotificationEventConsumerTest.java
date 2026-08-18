@@ -1,6 +1,5 @@
 package com.example.bookstore.messaging.consumer;
 
-import com.example.bookstore.config.DeadLetterService;
 import com.example.bookstore.event.ProcessedEvent;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
@@ -31,8 +30,6 @@ class NotificationEventConsumerTest {
     @Mock
     private MessagingMetrics messagingMetrics;
     @Mock
-    private DeadLetterService deadLetterService;
-    @Mock
     private EmailTemplateEngine templateEngine;
     @Mock
     private EmailService emailService;
@@ -42,7 +39,7 @@ class NotificationEventConsumerTest {
     @BeforeEach
     void setUp() {
         consumer = new NotificationEventConsumer(processedEventRepository, messagingMetrics,
-                deadLetterService, templateEngine, emailService);
+                templateEngine, emailService);
     }
 
     private DomainEventEnvelope envelope(String eventType, Map<String, Object> payload) {

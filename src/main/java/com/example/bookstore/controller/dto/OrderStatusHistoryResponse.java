@@ -12,6 +12,7 @@ public class OrderStatusHistoryResponse {
     private String comment;
     private LocalDateTime createdAt;
 
+    /** No-arg constructor required for JSON deserialization. */
     public OrderStatusHistoryResponse() {}
 
     public OrderStatusHistoryResponse(Long id, OrderStatus previousStatus, OrderStatus newStatus,

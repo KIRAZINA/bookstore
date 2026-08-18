@@ -16,7 +16,6 @@ import com.example.bookstore.service.payment.PaymentProvider;
 import com.example.bookstore.service.payment.PaymentProviderResponse;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
@@ -234,7 +233,7 @@ public class PaymentService {
     public org.springframework.data.domain.Page<Payment> getAllPayments(
             int page, int size, String sortBy, String direction, PaymentStatus status) {
         org.springframework.data.domain.Sort sort = org.springframework.data.domain.Sort.by(
-                direction.equalsIgnoreCase("asc") ? org.springframework.data.domain.Sort.Direction.ASC
+                "asc".equalsIgnoreCase(direction) ? org.springframework.data.domain.Sort.Direction.ASC
                         : org.springframework.data.domain.Sort.Direction.DESC, sortBy);
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(page, size, sort);
         if (status != null) {

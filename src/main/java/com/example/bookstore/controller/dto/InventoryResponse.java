@@ -10,6 +10,7 @@ public class InventoryResponse {
     private int totalQuantity;
     private InventoryStatus status;
 
+    /** No-arg constructor required for JSON deserialization. */
     public InventoryResponse() {}
 
     public InventoryResponse(Long bookId, String bookTitle, int availableQuantity,

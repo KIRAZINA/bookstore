@@ -1,11 +1,12 @@
 package com.example.bookstore.config;
 
 import org.springframework.boot.actuate.info.InfoContributor;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.data.redis.connection.RedisConnection;
 import org.springframework.data.redis.connection.RedisConnectionFactory;
 
 import java.util.Map;
@@ -14,11 +15,14 @@ import java.util.Map;
 public class ActuatorConfig {
 
     @Bean
-    @ConditionalOnBean(RedisConnectionFactory.class)
-    public HealthIndicator redisHealthIndicator(RedisConnectionFactory connectionFactory) {
+    public HealthIndicator redisHealthIndicator(ObjectProvider<RedisConnectionFactory> connectionFactoryProvider) {
+        RedisConnectionFactory connectionFactory = connectionFactoryProvider.getIfAvailable();
+        if (connectionFactory == null) {
+            return () -> Health.up().withDetail("service", "Redis").withDetail("enabled", false).build();
+        }
         return () -> {
             try {
-                var connection = connectionFactory.getConnection();
+                RedisConnection connection = connectionFactory.getConnection();
                 connection.ping();
                 connection.close();
                 return Health.up().withDetail("service", "Redis").build();

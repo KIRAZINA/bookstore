@@ -12,6 +12,7 @@ public class BookResponse {
     private Integer availableQuantity;
     private String inventoryStatus;
 
+    /** No-arg constructor required for JSON deserialization. */
     public BookResponse() {}
 
     public BookResponse(Long id, String title, String author, BigDecimal price,

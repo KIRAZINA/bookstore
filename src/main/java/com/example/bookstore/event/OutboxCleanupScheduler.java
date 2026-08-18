@@ -1,7 +1,6 @@
 package com.example.bookstore.event;
 
 import com.example.bookstore.event.repository.EventOutboxRepository;
-import com.example.bookstore.metrics.BusinessMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;

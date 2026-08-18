@@ -92,6 +92,9 @@ management:
       show-components: when-authorized
       probes:
         enabled: true
+      group:
+        startup:
+          include: livenessState
     env:
       access: read_only
     configprops:

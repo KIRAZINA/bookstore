@@ -15,6 +15,7 @@ public class OrderResponse {
     private BigDecimal totalPrice;
     private Integer totalItems;
 
+    /** No-arg constructor required for JSON deserialization. */
     public OrderResponse() {}
 
     public OrderResponse(Long id, Long userId, String username, OrderStatus status,

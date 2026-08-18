@@ -1,6 +1,5 @@
 package com.example.bookstore.config;
 
-import com.example.bookstore.config.KafkaTopicConfig;
 import com.example.bookstore.messaging.DomainEventEnvelope;
 import com.example.bookstore.messaging.EnvelopeConverter;
 import com.example.bookstore.messaging.metrics.MessagingMetrics;
@@ -16,7 +15,7 @@ import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 @Component
-@ConditionalOnProperty(value = "spring.kafka.bootstrap-servers")
+@ConditionalOnProperty("spring.kafka.bootstrap-servers")
 public class DeadLetterService {
 
     private static final Logger log = LoggerFactory.getLogger(DeadLetterService.class);

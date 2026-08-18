@@ -63,7 +63,7 @@ public final class EnvelopeConverter {
             return MAPPER.writeValueAsString(map);
         } catch (JsonProcessingException e) {
             log.error("Failed to serialize event payload: {}", event.getClass().getSimpleName(), e);
-            throw new RuntimeException("Event serialization failed", e);
+            throw new IllegalStateException("Event serialization failed", e);
         }
     }
 
@@ -91,7 +91,7 @@ public final class EnvelopeConverter {
                     } else {
                         map.put(comp.getName(), value);
                     }
-                } catch (Exception e) {
+                } catch (ReflectiveOperationException | RuntimeException e) {
                     map.put(comp.getName(), null);
                 }
             }
@@ -110,7 +110,7 @@ public final class EnvelopeConverter {
         try {
             return MAPPER.writeValueAsString(envelope);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to serialize envelope", e);
+            throw new IllegalStateException("Failed to serialize envelope", e);
         }
     }
 
@@ -118,7 +118,7 @@ public final class EnvelopeConverter {
         try {
             return MAPPER.readValue(json, DomainEventEnvelope.class);
         } catch (JsonProcessingException e) {
-            throw new RuntimeException("Failed to deserialize envelope", e);
+            throw new IllegalStateException("Failed to deserialize envelope", e);
         }
     }
 }

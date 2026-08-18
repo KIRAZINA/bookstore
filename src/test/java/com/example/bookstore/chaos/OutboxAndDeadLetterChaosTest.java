@@ -30,7 +30,7 @@ class OutboxAndDeadLetterChaosTest extends AbstractChaosTest {
     @Autowired
     private OutboxEventPublisher outboxEventPublisher;
 
-    @Autowired
+    @Autowired(required = false)
     private OutboxPublisherScheduler outboxPublisherScheduler;
 
     @Autowired

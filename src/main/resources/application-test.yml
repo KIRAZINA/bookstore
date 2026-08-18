@@ -17,6 +17,9 @@ spring:
   cache:
     type: simple
 
+  kafka:
+    bootstrap-servers: false
+
 app:
   cache:
     enabled: false

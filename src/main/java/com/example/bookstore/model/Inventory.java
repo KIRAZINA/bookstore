@@ -42,6 +42,7 @@ public class Inventory {
     @Version
     private Long version;
 
+    /** No-arg constructor required by JPA. */
     public Inventory() {
     }
 

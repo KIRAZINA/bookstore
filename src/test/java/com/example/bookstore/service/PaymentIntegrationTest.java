@@ -92,7 +92,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         cartService.addToCart(book.getId(), 2);
         Order order = orderService.createOrder();
 
-        Payment payment = paymentService.processPayment(order.getId(), "CREDIT_CARD");
+        paymentService.processPayment(order.getId(), "CREDIT_CARD");
 
         Payment reloaded = paymentRepository.findByOrderId(order.getId()).orElseThrow();
         assertEquals(PaymentStatus.COMPLETED, reloaded.getPaymentStatus());
@@ -112,7 +112,7 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         cartService.addToCart(book.getId(), 2);
         Order order = orderService.createOrder();
 
-        Payment payment = paymentService.processPayment(order.getId(), "CREDIT_CARD");
+        paymentService.processPayment(order.getId(), "CREDIT_CARD");
 
         Payment reloaded = paymentRepository.findByOrderId(order.getId()).orElseThrow();
         assertEquals(PaymentStatus.FAILED, reloaded.getPaymentStatus());

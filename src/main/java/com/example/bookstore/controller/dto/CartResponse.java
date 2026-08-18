@@ -10,6 +10,7 @@ public class CartResponse {
     private Integer totalItems;
     private BigDecimal totalPrice;
 
+    /** No-arg constructor required for JSON deserialization. */
     public CartResponse() {}
 
     public CartResponse(Long id, Long userId, List<CartItemResponse> items) {

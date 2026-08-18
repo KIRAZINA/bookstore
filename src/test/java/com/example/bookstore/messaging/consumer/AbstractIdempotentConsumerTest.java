@@ -1,6 +1,5 @@
 package com.example.bookstore.messaging.consumer;
 
-import com.example.bookstore.config.DeadLetterService;
 import com.example.bookstore.event.ProcessedEvent;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
@@ -28,8 +27,6 @@ class AbstractIdempotentConsumerTest {
     private ProcessedEventRepository processedEventRepository;
     @Mock
     private MessagingMetrics messagingMetrics;
-    @Mock
-    private DeadLetterService deadLetterService;
 
     private SpyConsumer consumer;
     private String validJson;
@@ -37,7 +34,7 @@ class AbstractIdempotentConsumerTest {
     @BeforeEach
     void setUp() {
         SpyConsumer.resetCallCount();
-        consumer = new SpyConsumer(processedEventRepository, messagingMetrics, deadLetterService);
+        consumer = new SpyConsumer(processedEventRepository, messagingMetrics);
         UUID eventId = UUID.randomUUID();
         validJson = """
                 {"eventId":"%s","aggregateType":"order","aggregateId":"1","eventType":"ORDER_CREATED","eventVersion":1,"timestamp":"2025-01-01T00:00:00Z","correlationId":"corr-1","producer":"bookstore","payload":{"orderId":1},"metadata":{}}
@@ -111,9 +108,8 @@ class AbstractIdempotentConsumerTest {
         static int processedCount = 0;
         boolean throwOnProcess = false;
 
-        SpyConsumer(ProcessedEventRepository repo, MessagingMetrics metrics,
-                     DeadLetterService dlt) {
-            super(repo, metrics, "test-group", dlt, "test-topic");
+        SpyConsumer(ProcessedEventRepository repo, MessagingMetrics metrics) {
+            super(repo, metrics, "test-group");
         }
 
         static void resetCallCount() {

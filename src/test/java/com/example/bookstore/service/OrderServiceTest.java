@@ -91,7 +91,6 @@ class OrderServiceTest {
         void createOrder_EmptyCart() {
             Cart emptyCart = new Cart();
             emptyCart.setUser(testUser);
-            when(securityUtils.getCurrentUser()).thenReturn(testUser);
             when(cartService.getCart()).thenReturn(emptyCart);
 
             assertThrows(IllegalStateException.class, () -> orderService.createOrder());
@@ -100,6 +99,22 @@ class OrderServiceTest {
         @Test
         @DisplayName("Створення замовлення без автентифікації")
         void createOrder_Unauthenticated() {
+            Book book = new Book();
+            book.setId(1L);
+            book.setTitle("Book");
+            book.setPrice(new BigDecimal("9.99"));
+
+            CartItem cartItem = new CartItem();
+            cartItem.setBook(book);
+            cartItem.setQuantity(1);
+            cartItem.setPriceAtAdd(new BigDecimal("9.99"));
+
+            Cart cart = new Cart();
+            cart.setUser(testUser);
+            cart.addItem(cartItem);
+
+            when(cartService.getCart()).thenReturn(cart);
+            when(inventoryService.getAvailableQuantity(1L)).thenReturn(5);
             when(securityUtils.getCurrentUser()).thenThrow(new IllegalStateException("User not authenticated"));
 
             assertThrows(IllegalStateException.class, () -> orderService.createOrder());

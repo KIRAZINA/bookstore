@@ -46,7 +46,7 @@ public class Order {
 
     @OneToOne(mappedBy = "order", cascade = CascadeType.ALL, fetch = FetchType.LAZY)
     @ToString.Exclude
-    private com.example.bookstore.model.Payment payment;
+    private Payment payment;
 
     @Version
     private Long version;
@@ -94,11 +94,11 @@ public class Order {
         return Collections.unmodifiableList(statusHistory);
     }
 
-    public com.example.bookstore.model.Payment getPayment() {
+    public Payment getPayment() {
         return payment;
     }
 
-    public void setPayment(com.example.bookstore.model.Payment payment) {
+    public void setPayment(Payment payment) {
         this.payment = payment;
     }
 

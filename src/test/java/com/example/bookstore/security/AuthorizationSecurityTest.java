@@ -27,7 +27,6 @@ class AuthorizationSecurityTest extends AbstractControllerTest {
     private UserRepository userRepository;
 
     private String user1Token;
-    private String user2Token;
     private String adminToken;
     private Long testBookId;
 
@@ -37,7 +36,6 @@ class AuthorizationSecurityTest extends AbstractControllerTest {
         bookRepository.deleteAll();
 
         user1Token = registerUserAndGetToken("authz-user1-" + System.nanoTime());
-        user2Token = registerUserAndGetToken("authz-user2-" + System.nanoTime());
         adminToken = registerAdminAndGetToken("authz-admin-" + System.nanoTime());
 
         Book book = new Book();

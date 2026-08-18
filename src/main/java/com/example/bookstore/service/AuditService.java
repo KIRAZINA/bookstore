@@ -58,7 +58,9 @@ public class AuditService {
     }
 
     private String sanitize(String input) {
-        if (input == null) return "null";
+        if (input == null) {
+            return "null";
+        }
         return input.replaceAll("[\\n\\r\\t]", "_");
     }
 }

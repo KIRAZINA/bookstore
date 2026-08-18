@@ -334,7 +334,7 @@ class PurchaseFlowE2ETest extends AbstractE2ETest {
 
         List<OrderStatusHistory> history = orderStatusHistoryRepository
                 .findByOrderIdOrderByCreatedAtAsc(orderId);
-        assertTrue(history.size() >= 2);
+        assertTrue(history.stream().anyMatch(h -> h.getNewStatus() == OrderStatus.PAID));
 
         List<EmailLog> emailLogs = emailLogRepository.findAll();
         assertFalse(emailLogs.isEmpty());

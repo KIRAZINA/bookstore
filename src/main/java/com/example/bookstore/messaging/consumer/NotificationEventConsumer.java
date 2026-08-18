@@ -1,6 +1,5 @@
 package com.example.bookstore.messaging.consumer;
 
-import com.example.bookstore.config.DeadLetterService;
 import com.example.bookstore.config.KafkaTopicConfig;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
@@ -16,7 +15,7 @@ import org.springframework.stereotype.Component;
 import java.util.Map;
 
 @Component
-@ConditionalOnProperty(value = "spring.kafka.bootstrap-servers")
+@ConditionalOnProperty("spring.kafka.bootstrap-servers")
 public class NotificationEventConsumer extends AbstractIdempotentConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationEventConsumer.class);
@@ -26,11 +25,9 @@ public class NotificationEventConsumer extends AbstractIdempotentConsumer {
 
     public NotificationEventConsumer(ProcessedEventRepository processedEventRepository,
                                       MessagingMetrics messagingMetrics,
-                                      DeadLetterService deadLetterService,
                                       EmailTemplateEngine templateEngine,
                                       EmailService emailService) {
-        super(processedEventRepository, messagingMetrics, KafkaTopicConfig.CONSUMER_GROUP_NOTIFICATIONS,
-                deadLetterService, KafkaTopicConfig.TOPIC_NOTIFICATIONS);
+        super(processedEventRepository, messagingMetrics, KafkaTopicConfig.CONSUMER_GROUP_NOTIFICATIONS);
         this.templateEngine = templateEngine;
         this.emailService = emailService;
     }

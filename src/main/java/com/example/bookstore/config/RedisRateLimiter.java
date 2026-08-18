@@ -2,16 +2,12 @@ package com.example.bookstore.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.List;
 
-@Component
-@ConditionalOnBean(RedisTemplate.class)
 public class RedisRateLimiter {
 
     private static final Logger log = LoggerFactory.getLogger(RedisRateLimiter.class);

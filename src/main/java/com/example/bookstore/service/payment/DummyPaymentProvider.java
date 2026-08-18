@@ -4,6 +4,7 @@ import com.example.bookstore.model.Payment;
 import com.example.bookstore.model.PaymentStatus;
 import org.springframework.stereotype.Component;
 
+import java.util.Locale;
 import java.util.UUID;
 
 @Component
@@ -16,13 +17,13 @@ public class DummyPaymentProvider implements PaymentProvider {
 
     @Override
     public PaymentProviderResponse processPayment(Payment payment) {
-        String transactionId = "TXN-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
+        String transactionId = "TXN-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase(Locale.ROOT);
         return PaymentProviderResponse.success(transactionId, PaymentStatus.COMPLETED);
     }
 
     @Override
     public PaymentProviderResponse refundPayment(Payment payment) {
-        String transactionId = payment.getTransactionId() + "-REF-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase();
+        String transactionId = payment.getTransactionId() + "-REF-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8).toUpperCase(Locale.ROOT);
         return PaymentProviderResponse.success(transactionId, PaymentStatus.REFUNDED);
     }
 }

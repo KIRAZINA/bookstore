@@ -52,7 +52,7 @@ public class EventOutbox {
     private OutboxStatus status = OutboxStatus.PENDING;
 
     @Column(name = "retry_count", nullable = false)
-    private int retryCount = 0;
+    private int retryCount;
 
     @Column(name = "created_at", nullable = false)
     private Instant createdAt;
@@ -60,6 +60,7 @@ public class EventOutbox {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    /** No-arg constructor required by JPA. */
     protected EventOutbox() {}
 
     public EventOutbox(UUID id, String aggregateType, String aggregateId, String eventType,

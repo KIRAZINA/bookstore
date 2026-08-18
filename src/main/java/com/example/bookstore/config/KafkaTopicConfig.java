@@ -1,6 +1,7 @@
 package com.example.bookstore.config;
 
 import org.apache.kafka.clients.admin.NewTopic;
+import org.apache.kafka.common.config.TopicConfig;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -9,7 +10,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.kafka.config.TopicBuilder;
 
 @Configuration
-@ConditionalOnProperty(value = "spring.kafka.bootstrap-servers")
+@ConditionalOnProperty("spring.kafka.bootstrap-servers")
 public class KafkaTopicConfig {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaTopicConfig.class);
@@ -30,7 +31,7 @@ public class KafkaTopicConfig {
         return TopicBuilder.name(TOPIC_ORDERS)
                 .partitions(3)
                 .replicas(1)
-                .config("retention.ms", String.valueOf(72 * 60 * 60 * 1000L))
+                .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(72 * 60 * 60 * 1000L))
                 .build();
     }
 
@@ -39,7 +40,7 @@ public class KafkaTopicConfig {
         return TopicBuilder.name(TOPIC_PAYMENTS)
                 .partitions(3)
                 .replicas(1)
-                .config("retention.ms", String.valueOf(72 * 60 * 60 * 1000L))
+                .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(72 * 60 * 60 * 1000L))
                 .build();
     }
 
@@ -48,7 +49,7 @@ public class KafkaTopicConfig {
         return TopicBuilder.name(TOPIC_INVENTORY)
                 .partitions(3)
                 .replicas(1)
-                .config("retention.ms", String.valueOf(168 * 60 * 60 * 1000L))
+                .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(168 * 60 * 60 * 1000L))
                 .build();
     }
 
@@ -57,7 +58,7 @@ public class KafkaTopicConfig {
         return TopicBuilder.name(TOPIC_NOTIFICATIONS)
                 .partitions(1)
                 .replicas(1)
-                .config("retention.ms", String.valueOf(24 * 60 * 60 * 1000L))
+                .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(24 * 60 * 60 * 1000L))
                 .build();
     }
 
@@ -66,7 +67,7 @@ public class KafkaTopicConfig {
         return TopicBuilder.name(TOPIC_DLT)
                 .partitions(1)
                 .replicas(1)
-                .config("retention.ms", String.valueOf(7 * 24 * 60 * 60 * 1000L))
+                .config(TopicConfig.RETENTION_MS_CONFIG, String.valueOf(7 * 24 * 60 * 60 * 1000L))
                 .build();
     }
 }

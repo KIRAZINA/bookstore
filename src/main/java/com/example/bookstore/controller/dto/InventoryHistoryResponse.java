@@ -19,6 +19,7 @@ public class InventoryHistoryResponse {
     private String reason;
     private LocalDateTime createdAt;
 
+    /** No-arg constructor required for JSON deserialization. */
     public InventoryHistoryResponse() {}
 
     public InventoryHistoryResponse(Long id, Long bookId, InventoryEventType eventType,

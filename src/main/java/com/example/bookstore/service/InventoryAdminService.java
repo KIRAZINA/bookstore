@@ -119,13 +119,11 @@ public class InventoryAdminService {
     }
 
     public List<Inventory> getInventoryByStatus(InventoryStatus status) {
-        int lowThreshold = 0;
         switch (status) {
             case OUT_OF_STOCK -> {
                 return inventoryRepository.findOutOfStock();
             }
             case CRITICAL_STOCK -> {
-                lowThreshold = Integer.MAX_VALUE;
                 return inventoryRepository.findAll().stream()
                         .filter(i -> validator.determineStatus(i.getAvailableQuantity()) == InventoryStatus.CRITICAL_STOCK)
                         .collect(Collectors.toList());

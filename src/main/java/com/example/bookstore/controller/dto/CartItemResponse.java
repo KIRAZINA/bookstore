@@ -1,8 +1,13 @@
 package com.example.bookstore.controller.dto;
 
+import lombok.Getter;
+import lombok.Setter;
+
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
+@Getter
+@Setter
 public class CartItemResponse {
     private Long id;
     private Long bookId;
@@ -13,6 +18,7 @@ public class CartItemResponse {
     private LocalDateTime addedAt;
     private BigDecimal subtotal;
 
+    /** No-arg constructor required for JSON deserialization. */
     public CartItemResponse() {}
 
     public CartItemResponse(Long id, Long bookId, String bookTitle, String bookAuthor, 
@@ -28,21 +34,4 @@ public class CartItemResponse {
             this.subtotal = priceAtAdd.multiply(BigDecimal.valueOf(quantity));
         }
     }
-
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-    public Long getBookId() { return bookId; }
-    public void setBookId(Long bookId) { this.bookId = bookId; }
-    public String getBookTitle() { return bookTitle; }
-    public void setBookTitle(String bookTitle) { this.bookTitle = bookTitle; }
-    public String getBookAuthor() { return bookAuthor; }
-    public void setBookAuthor(String bookAuthor) { this.bookAuthor = bookAuthor; }
-    public Integer getQuantity() { return quantity; }
-    public void setQuantity(Integer quantity) { this.quantity = quantity; }
-    public BigDecimal getPriceAtAdd() { return priceAtAdd; }
-    public void setPriceAtAdd(BigDecimal priceAtAdd) { this.priceAtAdd = priceAtAdd; }
-    public LocalDateTime getAddedAt() { return addedAt; }
-    public void setAddedAt(LocalDateTime addedAt) { this.addedAt = addedAt; }
-    public BigDecimal getSubtotal() { return subtotal; }
-    public void setSubtotal(BigDecimal subtotal) { this.subtotal = subtotal; }
 }

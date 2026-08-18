@@ -1,10 +1,16 @@
 package com.example.bookstore.model;
 
 import jakarta.persistence.*;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 import java.time.LocalDateTime;
 
 @Entity
 @Table(name = "order_status_history")
+@Getter
+@Setter
+@NoArgsConstructor
 public class OrderStatusHistory {
 
     @Id
@@ -31,21 +37,4 @@ public class OrderStatusHistory {
 
     @Column(name = "created_at", nullable = false)
     private LocalDateTime createdAt;
-
-    public OrderStatusHistory() {}
-
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-    public Order getOrder() { return order; }
-    public void setOrder(Order order) { this.order = order; }
-    public OrderStatus getPreviousStatus() { return previousStatus; }
-    public void setPreviousStatus(OrderStatus previousStatus) { this.previousStatus = previousStatus; }
-    public OrderStatus getNewStatus() { return newStatus; }
-    public void setNewStatus(OrderStatus newStatus) { this.newStatus = newStatus; }
-    public String getChangedBy() { return changedBy; }
-    public void setChangedBy(String changedBy) { this.changedBy = changedBy; }
-    public String getComment() { return comment; }
-    public void setComment(String comment) { this.comment = comment; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 }

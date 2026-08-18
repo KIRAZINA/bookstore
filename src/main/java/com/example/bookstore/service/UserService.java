@@ -6,7 +6,6 @@ import com.example.bookstore.repository.UserRepository;
 import io.opentelemetry.instrumentation.annotations.WithSpan;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
@@ -43,7 +42,7 @@ public class UserService implements UserDetailsService {
     }
 
     @Override
-    public UserDetails loadUserByUsername(String username) throws UsernameNotFoundException {
+    public UserDetails loadUserByUsername(String username) {
         AppUser user = findByUsername(username).orElseThrow(() -> new UsernameNotFoundException("User not found"));
         String roleWithoutPrefix;
         switch (user.getRole()) {

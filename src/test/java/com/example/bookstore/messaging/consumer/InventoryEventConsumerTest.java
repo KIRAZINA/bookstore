@@ -1,6 +1,5 @@
 package com.example.bookstore.messaging.consumer;
 
-import com.example.bookstore.config.DeadLetterService;
 import com.example.bookstore.event.ProcessedEvent;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
@@ -27,14 +26,12 @@ class InventoryEventConsumerTest {
     private ProcessedEventRepository processedEventRepository;
     @Mock
     private MessagingMetrics messagingMetrics;
-    @Mock
-    private DeadLetterService deadLetterService;
 
     private InventoryEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
-        consumer = new InventoryEventConsumer(processedEventRepository, messagingMetrics, deadLetterService);
+        consumer = new InventoryEventConsumer(processedEventRepository, messagingMetrics);
     }
 
     @Test

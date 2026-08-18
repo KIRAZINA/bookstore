@@ -124,7 +124,7 @@ class DatabaseFlywayIntegrationTest extends AbstractIntegrationTest {
         book = bookRepository.saveAndFlush(book);
 
         Inventory inventory = new Inventory(book.getId(), 10);
-        inventory = inventoryRepository.saveAndFlush(inventory);
+        inventoryRepository.saveAndFlush(inventory);
 
         bookRepository.delete(book);
         bookRepository.flush();

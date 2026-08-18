@@ -2,8 +2,6 @@ package com.example.bookstore.event;
 
 public final class EventTypes {
 
-    private EventTypes() {}
-
     public static final String AGGREGATE_ORDER = "ORDER";
     public static final String AGGREGATE_PAYMENT = "PAYMENT";
     public static final String AGGREGATE_INVENTORY = "INVENTORY";
@@ -26,4 +24,6 @@ public final class EventTypes {
     public static final String NOTIFICATION_REQUESTED = "NOTIFICATION_REQUESTED";
     public static final String NOTIFICATION_SENT = "NOTIFICATION_SENT";
     public static final String NOTIFICATION_FAILED = "NOTIFICATION_FAILED";
+
+    private EventTypes() {}
 }

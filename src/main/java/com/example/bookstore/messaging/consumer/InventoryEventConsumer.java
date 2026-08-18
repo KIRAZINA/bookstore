@@ -1,6 +1,5 @@
 package com.example.bookstore.messaging.consumer;
 
-import com.example.bookstore.config.DeadLetterService;
 import com.example.bookstore.config.KafkaTopicConfig;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
@@ -12,16 +11,14 @@ import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConditionalOnProperty(value = "spring.kafka.bootstrap-servers")
+@ConditionalOnProperty("spring.kafka.bootstrap-servers")
 public class InventoryEventConsumer extends AbstractIdempotentConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(InventoryEventConsumer.class);
 
     public InventoryEventConsumer(ProcessedEventRepository processedEventRepository,
-                                   MessagingMetrics messagingMetrics,
-                                   DeadLetterService deadLetterService) {
-        super(processedEventRepository, messagingMetrics, KafkaTopicConfig.CONSUMER_GROUP_INVENTORY,
-                deadLetterService, KafkaTopicConfig.TOPIC_INVENTORY);
+                                   MessagingMetrics messagingMetrics) {
+        super(processedEventRepository, messagingMetrics, KafkaTopicConfig.CONSUMER_GROUP_INVENTORY);
     }
 
     @KafkaListener(topics = KafkaTopicConfig.TOPIC_INVENTORY,

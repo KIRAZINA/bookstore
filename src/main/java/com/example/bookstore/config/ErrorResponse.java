@@ -53,6 +53,7 @@ public class ErrorResponse {
         private String field;
         private String message;
 
+        /** No-arg constructor required for JSON deserialization. */
         public FieldError() {}
 
         public FieldError(String field, String message) {

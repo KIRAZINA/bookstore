@@ -17,10 +17,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Instant;
 import java.util.List;
-import java.util.concurrent.ExecutionException;
 
 @Component
-@ConditionalOnProperty(value = "spring.kafka.bootstrap-servers")
+@ConditionalOnProperty("spring.kafka.bootstrap-servers")
 public class OutboxPublisherScheduler {
 
     private static final Logger log = LoggerFactory.getLogger(OutboxPublisherScheduler.class);
@@ -41,7 +40,9 @@ public class OutboxPublisherScheduler {
     @Transactional
     public void publishPendingEvents() {
         List<EventOutbox> pending = outboxRepository.findPendingEvents(maxRetries);
-        if (pending.isEmpty()) return;
+        if (pending.isEmpty()) {
+            return;
+        }
 
         log.debug("Publishing {} pending outbox events", pending.size());
 
@@ -62,8 +63,6 @@ public class OutboxPublisherScheduler {
                 Thread.currentThread().interrupt();
                 log.warn("Interrupted while publishing event {}", outbox.getEventType());
                 break;
-            } catch (ExecutionException e) {
-                handlePublishFailure(outbox, e);
             } catch (Exception e) {
                 handlePublishFailure(outbox, e);
             }
@@ -74,7 +73,7 @@ public class OutboxPublisherScheduler {
         outbox.incrementRetry();
         if (outbox.getRetryCount() >= maxRetries) {
             outboxRepository.markFailed(outbox.getId(), Instant.now());
-            log.error("Event {} (id={) permanently failed after {} retries",
+            log.error("Event {} (id={}) permanently failed after {} retries",
                     outbox.getEventType(), outbox.getId(), maxRetries, e);
         } else {
             outboxRepository.incrementRetry(outbox.getId());
@@ -84,10 +83,18 @@ public class OutboxPublisherScheduler {
     }
 
     private static String resolveTopic(String eventType) {
-        if (eventType.startsWith("ORDER_")) return KafkaTopicConfig.TOPIC_ORDERS;
-        if (eventType.startsWith("PAYMENT_")) return KafkaTopicConfig.TOPIC_PAYMENTS;
-        if (eventType.startsWith("INVENTORY_")) return KafkaTopicConfig.TOPIC_INVENTORY;
-        if (eventType.startsWith("NOTIFICATION_")) return KafkaTopicConfig.TOPIC_NOTIFICATIONS;
+        if (eventType.startsWith("ORDER_")) {
+            return KafkaTopicConfig.TOPIC_ORDERS;
+        }
+        if (eventType.startsWith("PAYMENT_")) {
+            return KafkaTopicConfig.TOPIC_PAYMENTS;
+        }
+        if (eventType.startsWith("INVENTORY_")) {
+            return KafkaTopicConfig.TOPIC_INVENTORY;
+        }
+        if (eventType.startsWith("NOTIFICATION_")) {
+            return KafkaTopicConfig.TOPIC_NOTIFICATIONS;
+        }
         return KafkaTopicConfig.TOPIC_ORDERS;
     }
 }

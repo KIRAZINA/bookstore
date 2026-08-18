@@ -1,6 +1,8 @@
 package com.example.bookstore.operational;
 
 import com.example.bookstore.base.AbstractControllerTest;
+import com.example.bookstore.model.UserRole;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -17,6 +19,15 @@ class OperationalReadinessTest extends AbstractControllerTest {
 
     @Autowired
     private ApplicationContext applicationContext;
+
+    private String adminToken;
+
+    @BeforeEach
+    void setUp() throws Exception {
+        userRepository.findByUsername("op-readiness-admin")
+                .orElseGet(() -> createTestUser("op-readiness-admin", UserRole.ROLE_ADMIN));
+        adminToken = loginAndGetToken("op-readiness-admin");
+    }
 
     @Nested
     @DisplayName("Application Startup Validation")
@@ -80,14 +91,16 @@ class OperationalReadinessTest extends AbstractControllerTest {
         @Test
         @DisplayName("Prometheus endpoint is available")
         void prometheusEndpointAvailable() throws Exception {
-            mockMvc.perform(get("/actuator/prometheus"))
+            mockMvc.perform(get("/actuator/prometheus")
+                            .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk());
         }
 
         @Test
         @DisplayName("Metrics endpoint is available")
         void metricsEndpointAvailable() throws Exception {
-            mockMvc.perform(get("/actuator/metrics"))
+            mockMvc.perform(get("/actuator/metrics")
+                            .header("Authorization", "Bearer " + adminToken))
                     .andExpect(status().isOk());
         }
     }

@@ -11,6 +11,7 @@ public class LoginResponse {
     private UserRole role;
     private long expiresIn;
 
+    /** No-arg constructor required for JSON deserialization. */
     public LoginResponse() {}
 
     public LoginResponse(String token, Long id, String username, String email, UserRole role, long expiresIn) {

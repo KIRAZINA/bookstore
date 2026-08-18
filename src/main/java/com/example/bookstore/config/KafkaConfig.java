@@ -21,11 +21,12 @@ import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.kafka.support.converter.StringJsonMessageConverter;
 import org.springframework.util.backoff.ExponentialBackOff;
 
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
 @Configuration
-@ConditionalOnProperty(value = "spring.kafka.bootstrap-servers")
+@ConditionalOnProperty("spring.kafka.bootstrap-servers")
 public class KafkaConfig {
 
     private static final Logger log = LoggerFactory.getLogger(KafkaConfig.class);
@@ -99,7 +100,8 @@ public class KafkaConfig {
                     int deliveryAttempt = 0;
                     if (record.headers().lastHeader("kafka_deliveryAttempt") != null) {
                         deliveryAttempt = Integer.parseInt(
-                                new String(record.headers().lastHeader("kafka_deliveryAttempt").value()));
+                                new String(record.headers().lastHeader("kafka_deliveryAttempt").value(),
+                                        StandardCharsets.UTF_8));
                     }
                     deadLetterService.sendToDlt(
                             record.topic(),

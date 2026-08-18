@@ -29,17 +29,17 @@ public class ProcessedEvent implements Persistable<ProcessedEvent.ProcessedEvent
     private Instant processedAt;
 
     @Transient
-    private boolean isNew = true;
+    private boolean newEntity;
 
     protected ProcessedEvent() {
-        this.isNew = false;
+        this.newEntity = false;
     }
 
     public ProcessedEvent(String eventId, String consumerGroup) {
         this.eventId = eventId;
         this.consumerGroup = consumerGroup;
         this.processedAt = Instant.now();
-        this.isNew = true;
+        this.newEntity = true;
     }
 
     @Override
@@ -49,7 +49,7 @@ public class ProcessedEvent implements Persistable<ProcessedEvent.ProcessedEvent
 
     @Override
     public boolean isNew() {
-        return isNew;
+        return newEntity;
     }
 
     public String getEventId() { return eventId; }
@@ -60,6 +60,7 @@ public class ProcessedEvent implements Persistable<ProcessedEvent.ProcessedEvent
         private String eventId;
         private String consumerGroup;
 
+        /** No-arg constructor required by JPA for @IdClass resolution. */
         public ProcessedEventId() {}
 
         public ProcessedEventId(String eventId, String consumerGroup) {
@@ -69,8 +70,12 @@ public class ProcessedEvent implements Persistable<ProcessedEvent.ProcessedEvent
 
         @Override
         public boolean equals(Object o) {
-            if (this == o) return true;
-            if (!(o instanceof ProcessedEventId that)) return false;
+            if (this == o) {
+                return true;
+            }
+            if (!(o instanceof ProcessedEventId that)) {
+                return false;
+            }
             return Objects.equals(eventId, that.eventId) && Objects.equals(consumerGroup, that.consumerGroup);
         }
 

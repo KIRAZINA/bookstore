@@ -1,6 +1,5 @@
 package com.example.bookstore.messaging.consumer;
 
-import com.example.bookstore.config.DeadLetterService;
 import com.example.bookstore.event.ProcessedEvent;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
@@ -18,19 +17,13 @@ public abstract class AbstractIdempotentConsumer {
     protected final ProcessedEventRepository processedEventRepository;
     protected final MessagingMetrics messagingMetrics;
     private final String consumerGroup;
-    private final DeadLetterService deadLetterService;
-    private final String topic;
 
     protected AbstractIdempotentConsumer(ProcessedEventRepository processedEventRepository,
                                           MessagingMetrics messagingMetrics,
-                                          String consumerGroup,
-                                          DeadLetterService deadLetterService,
-                                          String topic) {
+                                          String consumerGroup) {
         this.processedEventRepository = processedEventRepository;
         this.messagingMetrics = messagingMetrics;
         this.consumerGroup = consumerGroup;
-        this.deadLetterService = deadLetterService;
-        this.topic = topic;
     }
 
     @Transactional

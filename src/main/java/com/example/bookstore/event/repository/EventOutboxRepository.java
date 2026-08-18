@@ -1,7 +1,6 @@
 package com.example.bookstore.event.repository;
 
 import com.example.bookstore.event.EventOutbox;
-import com.example.bookstore.event.OutboxStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
