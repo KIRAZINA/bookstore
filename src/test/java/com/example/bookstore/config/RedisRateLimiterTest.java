@@ -8,6 +8,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.redis.RedisConnectionFailureException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 
@@ -56,12 +57,22 @@ class RedisRateLimiterTest {
         }
 
         @Test
-        @DisplayName("Returns true (fail-open) when Redis throws exception")
+        @DisplayName("Returns true (fail-open) when Redis connection fails")
         void redisDown() {
             when(redisTemplate.execute(any(), anyList(), any(Object[].class)))
-                    .thenThrow(new RuntimeException("Redis connection refused"));
+                    .thenThrow(new RedisConnectionFailureException("Redis connection refused"));
 
             assertTrue(rateLimiter.tryConsume("test-key", 10, Duration.ofMinutes(1), 1));
+        }
+
+        @Test
+        @DisplayName("Propagates non-Redis exceptions (does not mask logic bugs as fail-open)")
+        void nonRedisExceptionPropagates() {
+            when(redisTemplate.execute(any(), anyList(), any(Object[].class)))
+                    .thenThrow(new IllegalStateException("Rate limiter script bug"));
+
+            assertThrows(IllegalStateException.class,
+                    () -> rateLimiter.tryConsume("test-key", 10, Duration.ofMinutes(1), 1));
         }
 
         @Test

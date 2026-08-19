@@ -118,6 +118,13 @@ public class InventoryService {
     )
     @CacheEvict(cacheNames = {"inventory", "inventoryAvailable"}, key = "#bookId")
     public Inventory releaseReservation(Long bookId, int quantity, Long orderId, String reason, String changedBy) {
+        if (orderId != null && historyRepository.existsByBookIdAndOrderIdAndEventType(
+                bookId, orderId, InventoryEventType.RELEASED)) {
+            log.warn("Reservation for book {} already released for order {}; skipping duplicate release",
+                    bookId, orderId);
+            return getInventoryOrThrow(bookId);
+        }
+
         Inventory inventory = getInventoryOrThrow(bookId);
         validator.validateRelease(inventory, quantity);
 
@@ -173,6 +180,12 @@ public class InventoryService {
     )
     @CacheEvict(cacheNames = {"inventory", "inventoryAvailable"}, key = "#bookId")
     public Inventory restoreStock(Long bookId, int quantity, Long orderId, String reason, String changedBy) {
+        if (orderId != null && historyRepository.existsByBookIdAndOrderIdAndEventType(
+                bookId, orderId, InventoryEventType.RESTORED)) {
+            log.warn("Stock for book {} already restored for order {}; skipping duplicate restore", bookId, orderId);
+            return getInventoryOrThrow(bookId);
+        }
+
         Inventory inventory = getInventoryOrThrow(bookId);
 
         int previousAvailable = inventory.getAvailableQuantity();

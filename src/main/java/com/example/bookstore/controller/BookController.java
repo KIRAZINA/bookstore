@@ -85,6 +85,13 @@ public class BookController {
         return ResponseEntity.ok(toBookResponse(bookService.updateStock(id, request.getStock())));
     }
 
+    /**
+     * Maps a Book to the API response. The inventory table is the source of truth for quantity.
+     * {@code stock} is a legacy API field retained for backward compatibility: it mirrors
+     * {@code availableQuantity} and is intentionally not sourced from {@link Book#getStock()}
+     * (deprecated). No code path writes {@code Book.stock} as authoritative anymore
+     * (see {@code BookService.updateStock()}).
+     */
     private BookResponse toBookResponse(Book book) {
         int avail = inventoryService.getAvailableQuantity(book.getId());
         String status = inventoryValidator.determineStatus(avail).name();

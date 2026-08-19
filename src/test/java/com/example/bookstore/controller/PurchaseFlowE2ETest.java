@@ -65,6 +65,9 @@ class PurchaseFlowE2ETest extends AbstractE2ETest {
     @Autowired
     private com.example.bookstore.repository.CartRepository cartRepository;
 
+    @Autowired
+    private InventoryHistoryRepository historyRepository;
+
     @MockitoBean
     private DummyPaymentProvider paymentProvider;
 
@@ -200,6 +203,43 @@ class PurchaseFlowE2ETest extends AbstractE2ETest {
     }
 
     @Test
+    @DisplayName("Section 2: Cancelling an order after failed payment succeeds (no double release)")
+    void cancelAfterFailedPayment_Succeeds() throws Exception {
+        when(paymentProvider.processPayment(any()))
+                .thenReturn(PaymentProviderResponse.failed("INSUFFICIENT_FUNDS"));
+
+        Long orderId = performPurchase(3);
+
+        mockMvc.perform(post("/api/v1/payments/" + orderId + "/process")
+                        .header("Authorization", "Bearer " + userToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentMethod\": \"CREDIT_CARD\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paymentStatus").value("FAILED"));
+
+        Inventory afterFailure = inventoryRepository.findByBookId(bookId).orElseThrow();
+        assertEquals(0, afterFailure.getReservedQuantity(),
+                "Failed payment must have released the reservation");
+
+        mockMvc.perform(post("/api/v1/orders/" + orderId + "/cancel")
+                        .header("Authorization", "Bearer " + userToken))
+                .andExpect(status().isOk());
+
+        Order order = orderRepository.findById(orderId).orElseThrow();
+        assertEquals(OrderStatus.CANCELLED, order.getStatus());
+
+        Inventory afterCancel = inventoryRepository.findByBookId(bookId).orElseThrow();
+        assertEquals(20, afterCancel.getAvailableQuantity(),
+                "Inventory must not be double-released by cancel after failed payment");
+        assertEquals(0, afterCancel.getReservedQuantity());
+
+        List<InventoryHistory> released = historyRepository
+                .findByOrderIdAndEventType(orderId, InventoryEventType.RELEASED);
+        assertEquals(1, released.size(),
+                "Release must be recorded exactly once, not duplicated by the cancel");
+    }
+
+    @Test
     @DisplayName("Section 3: Refund via admin API restores stock and notifies")
     void refundPayment_RestoresStock() throws Exception {
         when(paymentProvider.processPayment(any()))
@@ -289,6 +329,45 @@ class PurchaseFlowE2ETest extends AbstractE2ETest {
         Inventory inventory = inventoryRepository.findByBookId(bookId).orElseThrow();
         assertEquals(20, inventory.getAvailableQuantity(),
                 "Inventory should be restored after admin cancellation");
+    }
+
+    @Test
+    @DisplayName("Section 4: Cancel paid order + refund restores stock exactly once")
+    void cancelPaidOrderThenRefund_RestoresStockOnce() throws Exception {
+        when(paymentProvider.processPayment(any()))
+                .thenReturn(PaymentProviderResponse.success("TXN-CANCEL-REF-001", PaymentStatus.COMPLETED));
+        when(paymentProvider.refundPayment(any()))
+                .thenReturn(PaymentProviderResponse.success("TXN-CANCEL-REF-REF-001", PaymentStatus.REFUNDED));
+
+        Long orderId = performPurchase(2);
+
+        mockMvc.perform(post("/api/v1/payments/" + orderId + "/process")
+                        .header("Authorization", "Bearer " + userToken)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"paymentMethod\": \"CREDIT_CARD\"}"))
+                .andExpect(status().isOk());
+
+        Payment payment = paymentRepository.findByOrderId(orderId).orElseThrow();
+        Long paymentId = payment.getId();
+
+        mockMvc.perform(post("/api/v1/admin/orders/" + orderId + "/cancel")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk());
+
+        mockMvc.perform(post("/api/v1/admin/payments/" + paymentId + "/refund")
+                        .header("Authorization", "Bearer " + adminToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paymentStatus").value("REFUNDED"));
+
+        Inventory inventory = inventoryRepository.findByBookId(bookId).orElseThrow();
+        assertEquals(20, inventory.getAvailableQuantity(),
+                "Stock must be restored exactly once despite cancel + refund");
+        assertEquals(0, inventory.getReservedQuantity());
+
+        List<InventoryHistory> restored = historyRepository
+                .findByOrderIdAndEventType(orderId, InventoryEventType.RESTORED);
+        assertEquals(1, restored.size(),
+                "Restore must be recorded exactly once, not duplicated by the refund");
     }
 
     @Test

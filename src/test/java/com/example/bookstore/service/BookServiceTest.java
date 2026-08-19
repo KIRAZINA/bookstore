@@ -172,23 +172,16 @@ class BookServiceTest {
         @Test
         @DisplayName("Успішне оновлення stock")
         void updateStock_Success() {
-            Book updatedBook = new Book();
-            updatedBook.setId(1L);
-            updatedBook.setTitle("Test Book");
-            updatedBook.setAuthor("Test Author");
-            updatedBook.setPrice(new BigDecimal("29.99"));
-            updatedBook.setStock(50);
-            updatedBook.setCategory("Programming");
-
             when(bookRepository.findById(1L))
-                    .thenReturn(Optional.of(testBook))
-                    .thenReturn(Optional.of(updatedBook));
+                    .thenReturn(Optional.of(testBook));
 
             Book result = bookService.updateStock(1L, 50);
 
             assertNotNull(result);
-            assertEquals(50, result.getStock());
             verify(inventoryAdminService).adjustInventory(1L, 50, "Admin stock update via BookService.updateStock");
+            verify(bookRepository, never()).save(any(Book.class));
+            assertEquals(10, result.getStock(),
+                    "Book.stock is deprecated and must not be written as authoritative; inventory is the source of truth");
         }
 
         @Test

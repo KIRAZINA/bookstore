@@ -21,4 +21,6 @@ public interface InventoryHistoryRepository extends JpaRepository<InventoryHisto
     List<InventoryHistory> findByEventType(InventoryEventType eventType);
 
     List<InventoryHistory> findByOrderIdAndEventType(Long orderId, InventoryEventType eventType);
+
+    boolean existsByBookIdAndOrderIdAndEventType(Long bookId, Long orderId, InventoryEventType eventType);
 }

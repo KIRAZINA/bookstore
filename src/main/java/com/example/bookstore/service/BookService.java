@@ -83,16 +83,13 @@ public class BookService {
         }
         Book book = bookRepository.findById(bookId)
                 .orElseThrow(() -> new IllegalArgumentException("Book not found"));
+        // The inventory table is the single source of truth for stock; Book.stock is @Deprecated
+        // and must not be written as authoritative (see V6 migration comment).
         inventoryAdminService.adjustInventory(bookId, stock,
                 "Admin stock update via BookService.updateStock");
-        book.setStock(stock);
-        Book saved = bookRepository.save(book);
-        if (saved == null) {
-            saved = book;
-        }
         evictBooksCache();
         evictBookByIdCache();
-        return saved;
+        return book;
     }
 
     public int getAvailableQuantity(Long bookId) {

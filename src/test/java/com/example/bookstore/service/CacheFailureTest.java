@@ -153,8 +153,8 @@ class CacheFailureTest {
 
         Book updated = bookService.updateStock(saved.getId(), 100);
 
-        assertEquals(100, updated.getStock());
         Inventory inv = inventoryRepository.findByBookId(saved.getId()).orElseThrow();
-        assertEquals(100, inv.getAvailableQuantity());
+        assertEquals(100, inv.getAvailableQuantity(), "Inventory table is the source of truth for stock");
+        assertEquals(1, updated.getStock(), "Deprecated Book.stock is not written by updateStock");
     }
 }

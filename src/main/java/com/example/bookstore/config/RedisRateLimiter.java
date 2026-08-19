@@ -2,6 +2,8 @@ package com.example.bookstore.config;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.data.redis.core.script.RedisScript;
 
@@ -48,8 +50,8 @@ public class RedisRateLimiter {
                     String.valueOf(cost)
             );
             return Boolean.TRUE.equals(allowed);
-        } catch (Exception e) {
-            log.warn("Rate limiter Redis call failed, allowing request: key={}", key, e);
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            log.warn("Rate limiter Redis unavailable, allowing request (fail-open): key={}", key, e);
             return true;
         }
     }
