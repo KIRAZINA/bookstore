@@ -33,7 +33,6 @@ app:
     enabled: ${APP_RATE_LIMITING_ENABLED:false}
   outbox:
     poll-interval: 500
-    batch-size: 100
 
 management:
   server:

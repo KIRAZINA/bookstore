@@ -45,11 +45,9 @@ app:
     thresholds:
       low: 10
       critical: 3
-    cache-ttl-seconds: 60
   outbox:
     poll-interval: 1000
     max-retries: 5
-    batch-size: 100
 
 management:
   server:

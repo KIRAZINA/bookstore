@@ -27,7 +27,6 @@ app:
     enabled: false
   outbox:
     poll-interval: 500
-    batch-size: 100
 
 management:
   endpoints:
