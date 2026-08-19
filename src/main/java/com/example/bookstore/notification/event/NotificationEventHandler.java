@@ -5,6 +5,7 @@ import com.example.bookstore.notification.email.EmailService;
 import com.example.bookstore.notification.template.EmailTemplateEngine;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.annotation.Async;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
@@ -12,7 +13,16 @@ import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.util.Map;
 
+/**
+ * In-process notification delivery: renders and sends emails after the business transaction
+ * commits. Active only when {@code app.notifications.delivery-mode=in-process} (the default
+ * in test and no-Kafka environments). In {@code kafka} mode, email delivery is handled by
+ * {@link com.example.bookstore.messaging.consumer.NotificationEventConsumer} instead, so the
+ * two paths never both fire for the same event.
+ */
 @Component
+@ConditionalOnProperty(prefix = "app.notifications", name = "delivery-mode",
+        havingValue = "in-process", matchIfMissing = true)
 public class NotificationEventHandler {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationEventHandler.class);

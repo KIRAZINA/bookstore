@@ -27,6 +27,8 @@ app:
     enabled: true
   rate-limiting:
     enabled: false
+  notifications:
+    delivery-mode: in-process
 jwt:
   secret: bookstore-test-secret-key-that-is-long-enough-for-hs256
   expiration: 3600000

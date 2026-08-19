@@ -25,6 +25,8 @@ app:
     enabled: false
   rate-limiting:
     enabled: false
+  notifications:
+    delivery-mode: in-process
 
 management:
   endpoints:

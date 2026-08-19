@@ -6,6 +6,7 @@ import com.example.bookstore.messaging.DomainEventEnvelope;
 import com.example.bookstore.messaging.metrics.MessagingMetrics;
 import com.example.bookstore.notification.email.EmailService;
 import com.example.bookstore.notification.template.EmailTemplateEngine;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -70,6 +71,19 @@ class NotificationEventConsumerTest {
                     "orderId", 1, "userName", "test", "userEmail", "a@b.com",
                     "previousStatus", "PENDING", "newStatus", "PAID");
             consumer.doProcess(envelope("ORDER_STATUS_CHANGED", data));
+
+            verify(templateEngine).render(eq("order-status-changed"), anyMap());
+            verify(emailService).sendEmail("a@b.com", "Order Status Update #1", "<html>body</html>", "ORDER_STATUS_CHANGED");
+        }
+
+        @Test
+        @DisplayName("Handles ORDER_CANCELLED event like a status change")
+        void orderCancelled() {
+            when(templateEngine.render(anyString(), anyMap())).thenReturn("<html>body</html>");
+            Map<String, Object> data = Map.of(
+                    "orderId", 1, "userName", "test", "userEmail", "a@b.com",
+                    "previousStatus", "PAID", "newStatus", "CANCELLED");
+            consumer.doProcess(envelope("ORDER_CANCELLED", data));
 
             verify(templateEngine).render(eq("order-status-changed"), anyMap());
             verify(emailService).sendEmail("a@b.com", "Order Status Update #1", "<html>body</html>", "ORDER_STATUS_CHANGED");
@@ -147,7 +161,8 @@ class NotificationEventConsumerTest {
         void delegates() {
             when(processedEventRepository.saveAndFlush(any(ProcessedEvent.class)))
                     .thenReturn(mock(ProcessedEvent.class));
-            consumer.onNotificationEvent(validJson("NOTIFICATION_SEND"));
+            consumer.onNotificationEvent(new ConsumerRecord<String, String>("orders.events", 0, 0L,
+                    "1", validJson("NOTIFICATION_SEND")));
 
             verify(processedEventRepository).saveAndFlush(any(ProcessedEvent.class));
         }

@@ -64,17 +64,17 @@ app:
     enabled: true
   rate-limiting:
     enabled: true
+  notifications:
+    delivery-mode: ${NOTIFICATIONS_DELIVERY_MODE:kafka}
   cors:
     allowed-origins: ${CORS_ALLOWED_ORIGINS:http://localhost:8080,http://localhost:3000}
   inventory:
     thresholds:
       low: 10
       critical: 3
-    cache-ttl-seconds: 60
   outbox:
     poll-interval: 1000
     max-retries: 5
-    batch-size: 100
     cleanup:
       enabled: true
       retention: 7d

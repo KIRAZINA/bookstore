@@ -49,6 +49,11 @@ public class AuditService {
         auditLog.warn("SECURITY_EVENT event={} detail={}", sanitize(event), sanitize(detail));
     }
 
+    public void logEventConsumed(String eventType, String aggregateId, String eventId) {
+        auditLog.info("EVENT_CONSUMED type={} aggregateId={} eventId={}",
+                sanitize(eventType), sanitize(aggregateId), sanitize(eventId));
+    }
+
     private String getCurrentUsername() {
         try {
             return securityUtils.getCurrentUser().getUsername();
