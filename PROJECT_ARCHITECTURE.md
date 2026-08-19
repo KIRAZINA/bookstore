@@ -197,16 +197,17 @@ com.example.bookstore
 
 ### Dependency Management
 - **Build Tool**: Maven 3.9+ (wrapper provided)
-- **Parent**: spring-boot-starter-parent 4.0.6
+- **Parent**: spring-boot-starter-parent 4.0.7
 - **Java**: 21 (enforced via maven-enforcer-plugin)
 - **Key Dependencies**:
   - Spring Boot Starters: web, data-jpa, security, actuator, validation, mail, kafka, cache, data-redis, test
   - Database: PostgreSQL (runtime), H2 (test), Flyway (migrations)
   - JWT: jjwt-api/impl/jackson 0.12.3
-  - OpenAPI: springdoc-openapi-starter-webmvc-ui 3.0.3
+  - OpenAPI: springdoc-openapi-starter-webmvc-ui 3.0.3 (swagger-ui overridden to 5.32.14)
   - Rate Limiting: bucket4j-core 8.10.1 (but uses custom Redis Lua script)
   - Observability: micrometer-registry-prometheus, OpenTelemetry (API, instrumentation, javaagent)
   - Test: Testcontainers 2.0.5 (PostgreSQL, Kafka, Redis), spring-boot-starter-test, spring-security-test, awaitility
+- **Version Overrides** (beyond the Spring Boot BOM, patched for CVEs): netty 4.2.17.Final, Tomcat 11.0.25, PostgreSQL driver 42.7.12, swagger-ui 5.32.14
 - **Quality Profiles** (Maven):
   - `ci`: checkstyle, PMD, SpotBugs, OWASP Dependency Check
   - `performance`: JUnit group "performance"
@@ -401,7 +402,7 @@ canTransitionTo() enforces above; isTerminal(): CANCELLED, REFUNDED
 ### Storage Mechanism
 - **Primary**: PostgreSQL 16 (relational)
 - **ORM**: Spring Data JPA (Hibernate 6.x) with `@Entity` mapping
-- **Migrations**: Flyway (7 versioned SQL scripts in `src/main/resources/db/migration/`)
+- **Migrations**: Flyway (8 versioned SQL scripts in `src/main/resources/db/migration/`)
 - **Cache**: Redis 7 (Spring Cache abstraction + `StringRedisTemplate` for rate limiting)
 - **Connection Pool**: HikariCP (min 2, max 10, configurable via `DB_POOL_MAX_SIZE`)
 
@@ -421,7 +422,7 @@ canTransitionTo() enforces above; isTerminal(): CANCELLED, REFUNDED
 | `inventory` | id (PK), book_id (UK), available_quantity, reserved_quantity, last_updated, version | CHECK available>=0, CHECK reserved>=0, unique book_id, index on book_id |
 | `inventory_history` | id (PK), inventory_id (FK), book_id (FK), event_type, previous_available, new_available, previous_reserved, new_reserved, quantity_change, order_id, payment_id, changed_by, reason, created_at | Indexes on inventory_id, book_id, order_id, event_type, created_at |
 | `email_log` | id (PK), recipient, subject, body (TEXT), email_type, status, error_message, retry_count, sent_at, created_at | Index on status, index on email_type |
-| `event_outbox` | id (UUID PK), aggregate_type, aggregate_id, event_type, event_version, correlation_id, trace_id, producer, payload (JSONB), metadata (JSONB), status, retry_count, created_at, published_at | Index on status, created_at, event_type |
+| `event_outbox` | id (UUID PK), aggregate_type, aggregate_id, event_type, event_version, correlation_id, trace_id, span_id, producer, payload (JSONB), metadata (JSONB), status, retry_count, created_at, published_at | Index on status, created_at, event_type |
 | `processed_events` | event_id, consumer_group (composite PK), processed_at | Index on consumer_group |
 
 ### Relationships & Cardinality
@@ -460,7 +461,7 @@ Payment (1) ←→ (N) PaymentHistory
 - Cache eviction on write operations (`@CacheEvict`)
 
 ### Migrations & Evolution
-Flyway migrations (V1-V7) applied in order:
+Flyway migrations (V1-V8) applied in order:
 1. V1: Initial schema (users, books, carts, orders, order_items)
 2. V2: Seed demo data (admin, testuser, 2 books)
 3. V3: `order_status_history` table
@@ -468,6 +469,7 @@ Flyway migrations (V1-V7) applied in order:
 5. V5: `email_log` table + indexes
 6. V6: `inventory`, `inventory_history` tables + data migration from `book.stock` + indexes
 7. V7: `event_outbox`, `processed_events` tables + indexes
+8. V8: `event_outbox.span_id` column (for W3C trace propagation) + index
 
 ### Caching & Indexing
 - **Redis Caches**: 4 named caches with differentiated TTLs (see CacheConfig)
@@ -858,7 +860,7 @@ sequenceDiagram
 **Main Pipeline** (`.github/workflows/ci.yml`):
 1. **Static Analysis** (reusable): checkstyle, PMD, SpotBugs
 2. **Build & Test** (reusable): `mvnw clean verify -Pci -Dspring.profiles.active=test -T 1C`, JaCoCo coverage (60% line, 50% branch, 60% method, 80% class)
-3. **Security Scan** (reusable): OWASP Dependency Check (fail on CVSS >= 7)
+3. **Security Scan** (reusable): OWASP Dependency Check (fail on CVSS >= 7; assembly analyzer disabled, no .NET in the project)
 4. **Manifest Validation**: Kustomize build for base + all overlays, kubeconform, Checkov
 5. **Docker Validation** (on push to main/release/*): Build image, Trivy scan (CRITICAL/HIGH), sign with Cosign
 6. **Quality Gate**: All previous jobs must succeed
@@ -927,34 +929,30 @@ sequenceDiagram
 1. **Deprecated `Book.stock` Field**:
    - `@Deprecated` on `Book.stock` with comment "book.stock is DEPRECATED. The inventory table is the source of truth"
    - V6 migration copies `book.stock` → `inventory.available_quantity`
-   - `BookService.updateStock()` still updates both `book.stock` and calls `inventoryAdminService.adjustInventory()`
+   - `BookService.updateStock()` now updates inventory only (via `inventoryAdminService.adjustInventory()`); `book.stock` is no longer written and is kept purely for backward compatibility
    - `BookController.toBookResponse()` returns both `stock` and `availableQuantity` (same value from inventory)
 
-2. **Manual Getters/Setters on Some Entities**:
-   - `Payment`, `OrderStatusHistory`, `PaymentHistory`, `EmailLog` have explicit getters/setters instead of Lombok
-   - Others use `@Getter`/`@Setter`/`@ToString`/`@EqualsAndHashCode`
-   - Inconsistent style suggests incremental migration or team preferences
+2. **Lombok Accessors on Entities**:
+   - `Payment`, `OrderStatusHistory`, `PaymentHistory`, `EmailLog` use Lombok `@Getter`/`@Setter`/`@NoArgsConstructor`
+   - Remaining hand-written accessors are limited to domain behavior (e.g. `Order.setItems`, `Cart.setItems`)
 
-3. **Double Inventory Restore on Refund**:
-   - `PaymentService.completeRefund()` calls `inventoryService.restoreAllStockForOrder()`
-   - `OrderService.adminCancelOrder()` for PAID orders also calls `inventoryService.restoreAllStockForOrder()`
-   - If admin cancels a PAID order, stock restored once; if refund processed separately, restored again
-   - No guard against double-restore for same order items
+3. **Inventory Restore Idempotency**:
+   - `InventoryService.restoreAllStockForOrder()` is guarded by idempotency checks (`existsByBookIdAndOrderIdAndEventType`), so double-invocation from `PaymentService.completeRefund()` + `OrderService.adminCancelOrder()` for the same order no longer double-restores stock
+   - The same guard protects `releaseReservation()` and `restoreStock()`
 
 4. **Rate Limiter Fail-Open**:
-   - `RedisRateLimiter.tryConsume()` catches all exceptions and returns `true` (allows request)
-   - Logs warning but doesn't block on Redis unavailability
-   - By design for availability over strict enforcement
+   - `RedisRateLimiter.tryConsume()` fails open only on Redis connectivity failures (`RedisConnectionFailureException`/`RedisSystemException`), returning `true` (allows request)
+   - Other exceptions propagate so non-Redis bugs are not silently swallowed
+   - Availability-over-enforcement during Redis outages, by design
 
-5. **Outbox Publisher Dual Publish**:
-   - `OutboxEventPublisher.publish()` saves to outbox AND calls `legacyPublisher.publishEvent(event)`
-   - Spring's `ApplicationEventPublisher` broadcasts to local `@EventListener` beans
-   - No local listeners currently registered; appears to be legacy/compatibility code
+5. **Notification Delivery Modes (in-process vs Kafka)**:
+   - `OutboxEventPublisher.publish()` saves to outbox AND calls `legacyPublisher.publishEvent(event)` — the local publish is consumed by `NotificationEventHandler` (`@TransactionalEventListener(AFTER_COMMIT)`) for in-process email delivery
+   - `app.notifications.delivery-mode` selects the path: `in-process` (test profiles) uses `NotificationEventHandler`; `kafka` (default at runtime) uses `NotificationEventConsumer`, which subscribes to `orders.events`, `payments.events` and `notifications.events`
+   - The two paths are mutually exclusive, so emails are never sent twice for the same event
 
-6. **Kafka Consumer No-Op Implementations**:
-   - `OrderEventConsumer`, `PaymentEventConsumer`, `InventoryEventConsumer` only log event receipt
-   - Actual business logic triggered by synchronous service calls, not consumers
-   - Consumers exist for future extensibility / external system integration
+6. **Kafka Consumer Behavior**:
+   - `OrderEventConsumer`, `PaymentEventConsumer`, `InventoryEventConsumer` record consumed events in the audit log (`EVENT_CONSUMED`) and exist for future extensibility / external system integration
+   - Actual business logic is triggered by synchronous service calls; consumers are idempotent and deduplicated via `ProcessedEvent`
 
 7. **Sorted Book IDs for Deadlock Prevention**:
    - `InventoryService.reserveAll()` sorts entries by bookId before acquiring pessimistic locks
@@ -962,42 +960,42 @@ sequenceDiagram
 
 8. **Email Template Engine Simplicity**:
    - Simple `{{placeholder}}` replacement via `String.replace()`
+   - Unsupplied placeholders are neutralized so rendered emails never leak raw template syntax
    - No template engine (Thymeleaf, FreeMarker) — lightweight but limited
 
 9. **Payment Provider Abstraction with Single Implementation**:
    - `PaymentProvider` interface + `DummyPaymentProvider` only
    - Designed for pluggability but no Stripe/PayPal/etc. implementations present
 
-10. **Correlation ID Propagation**:
+10. **Distributed Trace Propagation**:
     - `CorrelationIdFilter` sets MDC + response header
-    - `OutboxEventPublisher` extracts trace ID from OpenTelemetry SpanContext
-    - Kafka headers not explicitly propagated (trace ID in envelope metadata only)
+    - `OutboxEventPublisher` captures `trace_id`/`span_id` from the OpenTelemetry span at publish time
+    - `OutboxPublisherScheduler` injects a W3C `traceparent` Kafka header; `AbstractIdempotentConsumer` extracts it and continues the trace (unless the OTel agent has already started a child span for the consumer)
 
 ### Technical Debt & Legacy Patterns
 
-1. **Mixed Lombok/Manual Accessors**: As noted above, inconsistent entity style.
+1. **Lombok Accessors**: Standardized on Lombok for plain data entities (see quirk #2).
 
 2. **No API Versioning Strategy Beyond URL**:
    - Only `/api/v1/` present
    - No deprecation headers, sunset policies, or version negotiation
 
-3. **Hardcoded Strings in Event Publishing**:
-   - `EventTypes` constants used but string literals still appear in `resolveTopic()` and consumer logs
-   - `KafkaTopicConfig` topic names duplicated in `OutboxPublisherScheduler.resolveTopic()`
+3. **Topic & Event-Type Naming**:
+   - `resolveTopic()` derives topics from `EventTypes` aggregate prefixes; `NotificationEventConsumer` uses `EventTypes` constants
+   - `KafkaTopicConfig` remains the single source of topic names
 
-4. **No Distributed Tracing Context Propagation to Kafka**:
-   - Trace ID extracted from OTel span but not injected into Kafka headers
-   - Consumers don't extract/continue traces
+4. **Distributed Tracing Context Propagation to Kafka**:
+   - Implemented (see quirk #10): span context is injected as a W3C `traceparent` header by `OutboxPublisherScheduler` and continued in `AbstractIdempotentConsumer`; `event_outbox.span_id` (V8) stores the publishing span
 
 5. **Test Profile Uses Testcontainers But Not Kafka**:
    - `AbstractIntegrationTest` starts PostgreSQL + Redis containers
    - Kafka conditionally enabled via `@ConditionalOnProperty(spring.kafka.bootstrap-servers)`
-   - Integration tests may not exercise Kafka paths unless explicitly configured
+   - Integration tests may not exercise Kafka paths unless explicitly configured (`@EmbeddedKafka`)
 
-6. **Flyway Config Duplication**:
-   - `application.yml` has `spring.flyway.*` properties
-   - `FlywayConfig` class programmatically runs Flyway with same config
-   - Potential for double execution or conflicts
+6. **Flyway Migration Entry Point**:
+   - Verified empirically: the schema migrates exactly once at startup
+   - Spring Boot 4's Flyway auto-configuration is inactive because Flyway 11 no longer ships the `DatabaseFactory` class its condition requires; `FlywayConfig` is the sole migration trigger
+   - `spring.flyway.enabled` gates `FlywayConfig`; the `locations`/`baseline-on-migrate` keys mirror its hardcoded settings
 
 7. **Missing Circuit Breaker**:
    - `@Retryable` on inventory operations but no circuit breaker for external calls (payment provider, email)
@@ -1009,11 +1007,11 @@ sequenceDiagram
 
 9. **Single `DummyPaymentProvider`**:
    - Always returns success with synthetic transaction ID
-   - No failure simulation for testing error paths (chaos tests use separate chaos implementations)
+   - Failure paths are exercised by mocking the provider in `PaymentProviderChaosTest` (a `@SpringBootTest` in the default suite), not by separate chaos implementations
 
 10. **Audit Log Sanitization Minimal**:
     - `AuditService.sanitize()` only replaces newlines/tabs
-    - No PII masking, length limits, or structured formatting
+    - No PII masking, length limits, or structured formatting (accepted limitation)
 
 ### Notable Strengths
 

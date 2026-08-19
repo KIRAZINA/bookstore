@@ -47,6 +47,16 @@ mvnw.cmd spring-boot:run
 ./mvnw spring-boot:run
 ```
 
+### Notification delivery mode
+Email notifications can be delivered either in-process or through the Kafka event bus:
+
+- `NOTIFICATIONS_DELIVERY_MODE=kafka` (default) — `NotificationEventConsumer` renders and sends
+  emails from events consumed off `orders.events` / `payments.events` / `notifications.events`.
+- `NOTIFICATIONS_DELIVERY_MODE=in-process` — `NotificationEventHandler` sends emails directly
+  after the business transaction commits (no Kafka required; used by the test profiles).
+
+The two paths are mutually exclusive so an email is never sent twice for the same event.
+
 ### Run tests
 ```bash
 mvnw.cmd test
