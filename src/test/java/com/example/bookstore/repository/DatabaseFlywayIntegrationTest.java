@@ -5,13 +5,16 @@ import com.example.bookstore.model.Book;
 import com.example.bookstore.model.Inventory;
 import jakarta.persistence.EntityManager;
 import jakarta.validation.ConstraintViolationException;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationContext;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
 
@@ -28,6 +31,9 @@ class DatabaseFlywayIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private EntityManager entityManager;
+
+    @Autowired
+    private ApplicationContext applicationContext;
 
     @BeforeEach
     void setUp() {
@@ -155,5 +161,34 @@ class DatabaseFlywayIntegrationTest extends AbstractIntegrationTest {
             long failedCount = ((Number) result).longValue();
             assertEquals(0, failedCount, "All Flyway migrations should have succeeded");
         });
+    }
+
+    @Test
+    @DisplayName("Every migration script is applied exactly once and succeeded on a clean database")
+    void flywayMigration_AllVersionsAppliedExactlyOnce() {
+        transactionTemplate.executeWithoutResult(status -> {
+            List<Object[]> rows = entityManager
+                    .createNativeQuery("SELECT version, COUNT(*), SUM(CASE WHEN success THEN 1 ELSE 0 END) "
+                            + "FROM flyway_schema_history GROUP BY version ORDER BY version")
+                    .getResultList();
+
+            assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8"),
+                    rows.stream().map(r -> String.valueOf(r[0])).toList(),
+                    "Expected exactly the V1-V8 migrations in order");
+            for (Object[] row : rows) {
+                assertEquals(1L, ((Number) row[1]).longValue(),
+                        "Version " + row[0] + " must be applied exactly once");
+                assertEquals(1L, ((Number) row[2]).longValue(),
+                        "Version " + row[0] + " must have success=true");
+            }
+        });
+    }
+
+    @Test
+    @DisplayName("No Flyway engine bean exists; FlywayConfig's constructor is the sole migration trigger")
+    void flywayMigration_NoEngineBean() {
+        assertTrue(applicationContext.getBeansOfType(Flyway.class).isEmpty(),
+                "Migrations run via the FlywayConfig construction side effect; "
+                        + "no Flyway engine bean should be registered (auto-config is inactive)");
     }
 }
