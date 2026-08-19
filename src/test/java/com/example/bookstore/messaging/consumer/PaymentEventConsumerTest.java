@@ -4,6 +4,8 @@ import com.example.bookstore.event.ProcessedEvent;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
 import com.example.bookstore.messaging.metrics.MessagingMetrics;
+import com.example.bookstore.service.AuditService;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,12 +28,14 @@ class PaymentEventConsumerTest {
     private ProcessedEventRepository processedEventRepository;
     @Mock
     private MessagingMetrics messagingMetrics;
+    @Mock
+    private AuditService auditService;
 
     private PaymentEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
-        consumer = new PaymentEventConsumer(processedEventRepository, messagingMetrics);
+        consumer = new PaymentEventConsumer(processedEventRepository, messagingMetrics, auditService);
     }
 
     @Test
@@ -53,8 +57,18 @@ class PaymentEventConsumerTest {
     @DisplayName("onPaymentEvent delegates to processEvent")
     void onPaymentEvent() {
         when(processedEventRepository.saveAndFlush(any())).thenReturn(mock(ProcessedEvent.class));
-        consumer.onPaymentEvent(validJson("PAYMENT_COMPLETED"));
+        consumer.onPaymentEvent(new ConsumerRecord<String, String>("payments.events", 0, 0L,
+                "1", validJson("PAYMENT_COMPLETED")));
         verify(processedEventRepository).saveAndFlush(any());
+    }
+
+    @Test
+    @DisplayName("Audits the consumed integration event")
+    void auditsEvent() {
+        String eventType = "PAYMENT_COMPLETED";
+        consumer.onPaymentEvent(new ConsumerRecord<String, String>("payments.events", 0, 0L,
+                "1", validJson(eventType)));
+        verify(auditService).logEventConsumed(eq(eventType), eq("1"), anyString());
     }
 
     private String validJson(String eventType) {

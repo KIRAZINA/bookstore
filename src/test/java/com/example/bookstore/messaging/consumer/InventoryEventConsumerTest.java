@@ -4,6 +4,8 @@ import com.example.bookstore.event.ProcessedEvent;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
 import com.example.bookstore.messaging.metrics.MessagingMetrics;
+import com.example.bookstore.service.AuditService;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -26,12 +28,14 @@ class InventoryEventConsumerTest {
     private ProcessedEventRepository processedEventRepository;
     @Mock
     private MessagingMetrics messagingMetrics;
+    @Mock
+    private AuditService auditService;
 
     private InventoryEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
-        consumer = new InventoryEventConsumer(processedEventRepository, messagingMetrics);
+        consumer = new InventoryEventConsumer(processedEventRepository, messagingMetrics, auditService);
     }
 
     @Test
@@ -53,12 +57,18 @@ class InventoryEventConsumerTest {
     @DisplayName("onInventoryEvent delegates to processEvent")
     void onInventoryEvent() {
         when(processedEventRepository.saveAndFlush(any())).thenReturn(mock(ProcessedEvent.class));
-        consumer.onInventoryEvent(validJson("INVENTORY_RESERVED"));
+        consumer.onInventoryEvent(new ConsumerRecord<String, String>("inventory.events", 0, 0L,
+                "1", validJson("INVENTORY_RESERVED")));
         verify(processedEventRepository).saveAndFlush(any());
     }
 
-    private static void assertDoesNotThrow(Runnable r) {
-        try { r.run(); } catch (Exception e) { throw new AssertionError(e); }
+    @Test
+    @DisplayName("Audits the consumed integration event")
+    void auditsEvent() {
+        String eventType = "INVENTORY_RESERVED";
+        consumer.onInventoryEvent(new ConsumerRecord<String, String>("inventory.events", 0, 0L,
+                "1", validJson(eventType)));
+        verify(auditService).logEventConsumed(eq(eventType), eq("1"), anyString());
     }
 
     private String validJson(String eventType) {

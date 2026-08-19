@@ -4,6 +4,8 @@ import com.example.bookstore.config.KafkaTopicConfig;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
 import com.example.bookstore.messaging.metrics.MessagingMetrics;
+import com.example.bookstore.service.AuditService;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -16,22 +18,27 @@ public class InventoryEventConsumer extends AbstractIdempotentConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(InventoryEventConsumer.class);
 
+    private final AuditService auditService;
+
     public InventoryEventConsumer(ProcessedEventRepository processedEventRepository,
-                                   MessagingMetrics messagingMetrics) {
+                                   MessagingMetrics messagingMetrics,
+                                   AuditService auditService) {
         super(processedEventRepository, messagingMetrics, KafkaTopicConfig.CONSUMER_GROUP_INVENTORY);
+        this.auditService = auditService;
     }
 
     @KafkaListener(topics = KafkaTopicConfig.TOPIC_INVENTORY,
                    groupId = KafkaTopicConfig.CONSUMER_GROUP_INVENTORY,
                    containerFactory = "kafkaListenerContainerFactory")
-    public void onInventoryEvent(String message) {
-        processEvent(message, "inventory");
+    public void onInventoryEvent(ConsumerRecord<String, String> record) {
+        processEvent(record.value(), record.headers());
     }
 
     @Override
     protected void doProcess(DomainEventEnvelope envelope) {
-        String eventType = envelope.eventType();
         log.info("Processing inventory event: type={}, aggregateId={}, eventId={}",
-                eventType, envelope.aggregateId(), envelope.eventId());
+                envelope.eventType(), envelope.aggregateId(), envelope.eventId());
+        auditService.logEventConsumed(envelope.eventType(), envelope.aggregateId(),
+                envelope.eventId().toString());
     }
 }

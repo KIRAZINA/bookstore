@@ -3,6 +3,8 @@ package com.example.bookstore.messaging.consumer;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
 import com.example.bookstore.messaging.metrics.MessagingMetrics;
+import com.example.bookstore.service.AuditService;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -24,19 +26,31 @@ class OrderEventConsumerTest {
     private ProcessedEventRepository processedEventRepository;
     @Mock
     private MessagingMetrics messagingMetrics;
+    @Mock
+    private AuditService auditService;
 
     private OrderEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
-        consumer = new OrderEventConsumer(processedEventRepository, messagingMetrics);
+        consumer = new OrderEventConsumer(processedEventRepository, messagingMetrics, auditService);
     }
 
     @Test
-    @DisplayName("Creates with correct consumer group and topic")
+    @DisplayName("Processes valid event without failure")
     void constructor() {
-        consumer.onOrderEvent(validJson("ORDER_CREATED"));
+        consumer.onOrderEvent(new ConsumerRecord<String, String>("orders.events", 0, 0L,
+                "1", validJson("ORDER_CREATED")));
         verify(messagingMetrics, never()).recordEventFailed();
+    }
+
+    @Test
+    @DisplayName("Audits the consumed integration event")
+    void auditsEvent() {
+        String eventType = "ORDER_CREATED";
+        consumer.onOrderEvent(new ConsumerRecord<String, String>("orders.events", 0, 0L,
+                "1", validJson(eventType)));
+        verify(auditService).logEventConsumed(eq(eventType), eq("1"), anyString());
     }
 
     @Test

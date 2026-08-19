@@ -31,13 +31,18 @@ public class OutboxEventPublisher implements DomainEventPublisher {
     public void publish(BaseEvent event, String aggregateType, String aggregateId, String eventType) {
         String correlationId = event.getEventId().toString();
         String traceId = extractTraceId();
+        String spanId = extractSpanId();
 
         EventOutbox outbox = EnvelopeConverter.toOutbox(
                 event, aggregateType, aggregateId, eventType,
-                "bookstore", correlationId, traceId);
+                "bookstore", correlationId, traceId, spanId);
 
         outboxRepository.save(outbox);
 
+        // In-process delivery of the event to local @TransactionalEventListener beans
+        // (e.g. NotificationEventHandler). The outbox row above is what the Kafka
+        // integration bus consumes; the two channels are coordinated via the
+        // app.notifications.delivery-mode setting (see README).
         legacyPublisher.publishEvent(event);
 
         log.debug("Event published to outbox: type={}, aggregateId={}, eventId={}",
@@ -48,6 +53,14 @@ public class OutboxEventPublisher implements DomainEventPublisher {
         Span span = Span.current();
         if (span != null && span.getSpanContext().isValid()) {
             return span.getSpanContext().getTraceId();
+        }
+        return null;
+    }
+
+    private static String extractSpanId() {
+        Span span = Span.current();
+        if (span != null && span.getSpanContext().isValid()) {
+            return span.getSpanContext().getSpanId();
         }
         return null;
     }

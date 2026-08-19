@@ -1,11 +1,13 @@
 package com.example.bookstore.messaging.consumer;
 
 import com.example.bookstore.config.KafkaTopicConfig;
+import com.example.bookstore.event.EventTypes;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
 import com.example.bookstore.messaging.metrics.MessagingMetrics;
 import com.example.bookstore.notification.email.EmailService;
 import com.example.bookstore.notification.template.EmailTemplateEngine;
+import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -16,6 +18,7 @@ import java.util.Map;
 
 @Component
 @ConditionalOnProperty("spring.kafka.bootstrap-servers")
+@ConditionalOnProperty(prefix = "app.notifications", name = "delivery-mode", havingValue = "kafka")
 public class NotificationEventConsumer extends AbstractIdempotentConsumer {
 
     private static final Logger log = LoggerFactory.getLogger(NotificationEventConsumer.class);
@@ -32,11 +35,20 @@ public class NotificationEventConsumer extends AbstractIdempotentConsumer {
         this.emailService = emailService;
     }
 
-    @KafkaListener(topics = KafkaTopicConfig.TOPIC_NOTIFICATIONS,
-                   groupId = KafkaTopicConfig.CONSUMER_GROUP_NOTIFICATIONS,
-                   containerFactory = "kafkaListenerContainerFactory")
-    public void onNotificationEvent(String message) {
-        processEvent(message, "notification");
+    /**
+     * Notification-relevant events live on the orders/payments topics (each event is routed
+     * to the topic of its aggregate); {@code notifications.events} carries NOTIFICATION_*
+     * events produced by external/system producers.
+     */
+    @KafkaListener(topics = {
+            KafkaTopicConfig.TOPIC_ORDERS,
+            KafkaTopicConfig.TOPIC_PAYMENTS,
+            KafkaTopicConfig.TOPIC_NOTIFICATIONS
+        },
+        groupId = KafkaTopicConfig.CONSUMER_GROUP_NOTIFICATIONS,
+        containerFactory = "kafkaListenerContainerFactory")
+    public void onNotificationEvent(ConsumerRecord<String, String> record) {
+        processEvent(record.value(), record.headers());
     }
 
     @Override
@@ -46,11 +58,11 @@ public class NotificationEventConsumer extends AbstractIdempotentConsumer {
         Map<String, Object> payload = envelope.payload();
 
         switch (eventType) {
-            case "ORDER_CREATED" -> handleOrderCreated(payload);
-            case "ORDER_STATUS_CHANGED" -> handleOrderStatusChanged(payload);
-            case "PAYMENT_COMPLETED" -> handlePaymentCompleted(payload);
-            case "PAYMENT_FAILED" -> handlePaymentFailed(payload);
-            case "PAYMENT_REFUNDED" -> handlePaymentRefunded(payload);
+            case EventTypes.ORDER_CREATED -> handleOrderCreated(payload);
+            case EventTypes.ORDER_STATUS_CHANGED, EventTypes.ORDER_CANCELLED -> handleOrderStatusChanged(payload);
+            case EventTypes.PAYMENT_COMPLETED -> handlePaymentCompleted(payload);
+            case EventTypes.PAYMENT_FAILED -> handlePaymentFailed(payload);
+            case EventTypes.PAYMENT_REFUNDED -> handlePaymentRefunded(payload);
             default -> log.warn("Unknown notification event type: {}", eventType);
         }
     }

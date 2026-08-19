@@ -23,9 +23,9 @@ public final class EnvelopeConverter {
 
     private EnvelopeConverter() {}
 
-    public static EventOutbox toOutbox(BaseEvent event, String aggregateType, String aggregateId,
-                                        String eventType, String producer,
-                                        String correlationId, String traceId) {
+public static EventOutbox toOutbox(BaseEvent event, String aggregateType, String aggregateId,
+                                    String eventType, String producer,
+                                    String correlationId, String traceId, String spanId) {
         String payload = serializePayload(event);
         return new EventOutbox(
                 event.getEventId(),
@@ -35,6 +35,7 @@ public final class EnvelopeConverter {
                 1,
                 correlationId,
                 traceId,
+                spanId,
                 producer,
                 payload,
                 null

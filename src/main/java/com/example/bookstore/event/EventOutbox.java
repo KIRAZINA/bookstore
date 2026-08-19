@@ -36,6 +36,9 @@ public class EventOutbox {
     @Column(name = "trace_id", length = 100)
     private String traceId;
 
+    @Column(name = "span_id", length = 32)
+    private String spanId;
+
     @Column(name = "producer", nullable = false, length = 100)
     private String producer;
 
@@ -63,9 +66,9 @@ public class EventOutbox {
     /** No-arg constructor required by JPA. */
     protected EventOutbox() {}
 
-    public EventOutbox(UUID id, String aggregateType, String aggregateId, String eventType,
-                       int eventVersion, String correlationId, String traceId,
-                       String producer, String payload, String metadata) {
+public EventOutbox(UUID id, String aggregateType, String aggregateId, String eventType,
+                   int eventVersion, String correlationId, String traceId, String spanId,
+                   String producer, String payload, String metadata) {
         this.id = id;
         this.aggregateType = aggregateType;
         this.aggregateId = aggregateId;
@@ -73,6 +76,7 @@ public class EventOutbox {
         this.eventVersion = eventVersion;
         this.correlationId = correlationId;
         this.traceId = traceId;
+        this.spanId = spanId;
         this.producer = producer;
         this.payload = payload;
         this.metadata = metadata;
@@ -87,6 +91,7 @@ public class EventOutbox {
     public int getEventVersion() { return eventVersion; }
     public String getCorrelationId() { return correlationId; }
     public String getTraceId() { return traceId; }
+    public String getSpanId() { return spanId; }
     public String getProducer() { return producer; }
     public String getPayload() { return payload; }
     public String getMetadata() { return metadata; }

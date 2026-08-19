@@ -1,26 +1,29 @@
 package com.example.bookstore.event.publisher;
 
 import com.example.bookstore.event.EventOutbox;
-import com.example.bookstore.event.OutboxStatus;
 import com.example.bookstore.event.repository.EventOutboxRepository;
-import com.example.bookstore.messaging.EnvelopeConverter;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.kafka.support.SendResult;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,15 +35,27 @@ class OutboxPublisherSchedulerTest {
     private KafkaTemplate<String, String> kafkaTemplate;
 
     private OutboxPublisherScheduler scheduler;
+    private SendResult<String, String> successResult;
 
     @BeforeEach
     void setUp() {
+        successResult = mock(SendResult.class);
+        lenient().when(successResult.getRecordMetadata())
+                .thenReturn(mock(org.apache.kafka.clients.producer.RecordMetadata.class));
         scheduler = new OutboxPublisherScheduler(outboxRepository, kafkaTemplate, 5);
     }
 
     private EventOutbox anOutbox(String eventType) {
+        return anOutbox(eventType, null, null);
+    }
+
+    private EventOutbox anOutbox(String eventType, String traceId, String spanId) {
         return new EventOutbox(UUID.randomUUID(), "order", "1", eventType,
-                1, "corr-1", null, "bookstore", "{\"orderId\":1}", null);
+                1, "corr-1", traceId, spanId, "bookstore", "{\"orderId\":1}", null);
+    }
+
+    private CompletableFuture<SendResult<String, String>> successFuture() {
+        return CompletableFuture.completedFuture(successResult);
     }
 
     @Nested
@@ -54,7 +69,7 @@ class OutboxPublisherSchedulerTest {
 
             scheduler.publishPendingEvents();
 
-            verify(kafkaTemplate, never()).send(anyString(), anyString(), anyString());
+            verify(kafkaTemplate, never()).send(any(ProducerRecord.class));
         }
 
         @Test
@@ -62,20 +77,48 @@ class OutboxPublisherSchedulerTest {
         void publishesSuccessfully() {
             EventOutbox outbox = anOutbox("ORDER_CREATED");
             when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox));
-
-            SendResult<String, String> sendResult = mock(SendResult.class);
-            when(sendResult.getRecordMetadata()).thenReturn(mock(org.apache.kafka.clients.producer.RecordMetadata.class));
-            when(kafkaTemplate.send(anyString(), anyString(), anyString()))
-                    .thenAnswer(i -> {
-                        java.util.concurrent.CompletableFuture<SendResult<String, String>> f = new java.util.concurrent.CompletableFuture<>();
-                        f.complete(sendResult);
-                        return f;
-                    });
+            when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(successFuture());
 
             scheduler.publishPendingEvents();
 
-            verify(kafkaTemplate).send(eq("orders.events"), eq("1"), anyString());
+            ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+            verify(kafkaTemplate).send(captor.capture());
+            ProducerRecord<String, String> record = captor.getValue();
+            assertEquals("orders.events", record.topic());
+            assertEquals("1", record.key());
+            assertNotNull(record.value());
             verify(outboxRepository).markPublished(eq(outbox.getId()), any(Instant.class));
+        }
+
+        @Test
+        @DisplayName("Adds W3C traceparent header when trace context is available")
+        void addsTraceParentHeader() {
+            EventOutbox outbox = anOutbox("ORDER_CREATED", "0123456789abcdef0123456789abcdef", "0123456789abcdef");
+            when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox));
+            when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(successFuture());
+
+            scheduler.publishPendingEvents();
+
+            ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+            verify(kafkaTemplate).send(captor.capture());
+            org.apache.kafka.common.header.Header header = captor.getValue().headers().lastHeader("traceparent");
+            assertNotNull(header);
+            String traceParent = new String(header.value(), StandardCharsets.UTF_8);
+            assertEquals("00-0123456789abcdef0123456789abcdef-0123456789abcdef-01", traceParent);
+        }
+
+        @Test
+        @DisplayName("Skips traceparent header when trace context is incomplete")
+        void skipsTraceParentWhenMissing() {
+            EventOutbox outbox = anOutbox("ORDER_CREATED", "trace-only", null);
+            when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox));
+            when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(successFuture());
+
+            scheduler.publishPendingEvents();
+
+            ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+            verify(kafkaTemplate).send(captor.capture());
+            assertNull(captor.getValue().headers().lastHeader("traceparent"));
         }
 
         @Test
@@ -84,9 +127,9 @@ class OutboxPublisherSchedulerTest {
             EventOutbox outbox = anOutbox("ORDER_CREATED");
             when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox));
 
-            java.util.concurrent.CompletableFuture<SendResult<String, String>> failedFuture = new java.util.concurrent.CompletableFuture<>();
+            CompletableFuture<SendResult<String, String>> failedFuture = new CompletableFuture<>();
             failedFuture.completeExceptionally(new ExecutionException(new RuntimeException("Kafka unavailable")));
-            when(kafkaTemplate.send(anyString(), anyString(), anyString())).thenReturn(failedFuture);
+            when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(failedFuture);
 
             scheduler.publishPendingEvents();
 
@@ -104,9 +147,9 @@ class OutboxPublisherSchedulerTest {
             assertEquals(4, outbox.getRetryCount());
             when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox));
 
-            java.util.concurrent.CompletableFuture<SendResult<String, String>> failedFuture = new java.util.concurrent.CompletableFuture<>();
+            CompletableFuture<SendResult<String, String>> failedFuture = new CompletableFuture<>();
             failedFuture.completeExceptionally(new ExecutionException(new RuntimeException("Kafka unavailable")));
-            when(kafkaTemplate.send(anyString(), anyString(), anyString())).thenReturn(failedFuture);
+            when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(failedFuture);
 
             scheduler.publishPendingEvents();
 
@@ -123,16 +166,15 @@ class OutboxPublisherSchedulerTest {
 
             when(outboxRepository.findPendingEvents(5)).thenReturn(
                     List.of(orderOutbox, paymentOutbox, inventoryOutbox, notificationOutbox));
-
-            java.util.concurrent.CompletableFuture<SendResult<String, String>> success = java.util.concurrent.CompletableFuture.completedFuture(mock(SendResult.class));
-            when(kafkaTemplate.send(anyString(), anyString(), anyString())).thenReturn(success);
+            when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(successFuture());
 
             scheduler.publishPendingEvents();
 
-            verify(kafkaTemplate).send(eq("orders.events"), anyString(), anyString());
-            verify(kafkaTemplate).send(eq("payments.events"), anyString(), anyString());
-            verify(kafkaTemplate).send(eq("inventory.events"), anyString(), anyString());
-            verify(kafkaTemplate).send(eq("notifications.events"), anyString(), anyString());
+            ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+            verify(kafkaTemplate, times(4)).send(captor.capture());
+            List<String> topics = captor.getAllValues().stream().map(ProducerRecord::topic).toList();
+            assertTrue(topics.containsAll(List.of(
+                    "orders.events", "payments.events", "inventory.events", "notifications.events")));
         }
 
         @Test
@@ -141,9 +183,9 @@ class OutboxPublisherSchedulerTest {
             EventOutbox outbox = anOutbox("ORDER_CREATED");
             when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox, anOutbox("ORDER_CREATED")));
 
-            java.util.concurrent.CompletableFuture<SendResult<String, String>> interruptedFuture = new java.util.concurrent.CompletableFuture<>();
+            CompletableFuture<SendResult<String, String>> interruptedFuture = new CompletableFuture<>();
             interruptedFuture.completeExceptionally(new InterruptedException("Interrupted"));
-            when(kafkaTemplate.send(anyString(), anyString(), anyString())).thenReturn(interruptedFuture);
+            when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(interruptedFuture);
 
             scheduler.publishPendingEvents();
 

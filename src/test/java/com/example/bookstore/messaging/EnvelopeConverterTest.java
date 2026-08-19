@@ -34,7 +34,7 @@ class EnvelopeConverterTest {
         void convertsToOutbox() {
             EventOutbox outbox = EnvelopeConverter.toOutbox(
                     sampleEvent, EventTypes.AGGREGATE_ORDER, "1", EventTypes.ORDER_CREATED,
-                    "bookstore", "corr-123", "trace-456");
+                    "bookstore", "corr-123", "trace-456", "span-789");
 
             assertNotNull(outbox);
             assertEquals(sampleEvent.getEventId(), outbox.getId());
@@ -44,6 +44,7 @@ class EnvelopeConverterTest {
             assertEquals(1, outbox.getEventVersion());
             assertEquals("corr-123", outbox.getCorrelationId());
             assertEquals("trace-456", outbox.getTraceId());
+            assertEquals("span-789", outbox.getSpanId());
             assertEquals("bookstore", outbox.getProducer());
             assertNotNull(outbox.getPayload());
             assertNull(outbox.getMetadata());
@@ -54,7 +55,7 @@ class EnvelopeConverterTest {
         void payloadIsValidJson() {
             EventOutbox outbox = EnvelopeConverter.toOutbox(
                     sampleEvent, EventTypes.AGGREGATE_ORDER, "1", EventTypes.ORDER_CREATED,
-                    "bookstore", "corr-1", null);
+                    "bookstore", "corr-1", null, null);
 
             assertDoesNotThrow(() -> MAPPER.readTree(outbox.getPayload()));
         }
@@ -68,7 +69,7 @@ class EnvelopeConverterTest {
         void convertsToEnvelope() {
             EventOutbox outbox = EnvelopeConverter.toOutbox(
                     sampleEvent, EventTypes.AGGREGATE_ORDER, "1", EventTypes.ORDER_CREATED,
-                    "bookstore", "corr-123", "trace-456");
+                    "bookstore", "corr-123", "trace-456", "span-789");
 
             DomainEventEnvelope envelope = EnvelopeConverter.toEnvelope(outbox);
 

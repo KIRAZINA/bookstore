@@ -2,9 +2,11 @@ package com.example.bookstore.event.publisher;
 
 import com.example.bookstore.config.KafkaTopicConfig;
 import com.example.bookstore.event.EventOutbox;
+import com.example.bookstore.event.EventTypes;
 import com.example.bookstore.event.repository.EventOutboxRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
 import com.example.bookstore.messaging.EnvelopeConverter;
+import org.apache.kafka.clients.producer.ProducerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -15,6 +17,7 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.util.List;
 
@@ -53,7 +56,10 @@ public class OutboxPublisherScheduler {
                 String key = envelope.aggregateId();
                 String value = EnvelopeConverter.toJson(envelope);
 
-                SendResult<String, String> result = kafkaTemplate.send(topic, key, value).get();
+                ProducerRecord<String, String> record = new ProducerRecord<>(topic, key, value);
+                addTraceParentHeader(record, outbox.getTraceId(), outbox.getSpanId());
+
+                SendResult<String, String> result = kafkaTemplate.send(record).get();
                 outboxRepository.markPublished(outbox.getId(), Instant.now());
                 log.debug("Published event {} to topic {} partition {} offset {}",
                         outbox.getEventType(), topic,
@@ -66,6 +72,19 @@ public class OutboxPublisherScheduler {
             } catch (Exception e) {
                 handlePublishFailure(outbox, e);
             }
+        }
+    }
+
+    /**
+     * Injects a W3C {@code traceparent} header so consumers can continue the trace that
+     * originated in the business operation which created the outbox event.
+     */
+    private static void addTraceParentHeader(ProducerRecord<String, String> record,
+                                             String traceId, String spanId) {
+        if (traceId != null && spanId != null
+                && traceId.length() == 32 && spanId.length() == 16) {
+            String traceParent = "00-" + traceId + "-" + spanId + "-01";
+            record.headers().add("traceparent", traceParent.getBytes(StandardCharsets.UTF_8));
         }
     }
 
@@ -83,16 +102,16 @@ public class OutboxPublisherScheduler {
     }
 
     private static String resolveTopic(String eventType) {
-        if (eventType.startsWith("ORDER_")) {
+        if (eventType.startsWith(EventTypes.AGGREGATE_ORDER + "_")) {
             return KafkaTopicConfig.TOPIC_ORDERS;
         }
-        if (eventType.startsWith("PAYMENT_")) {
+        if (eventType.startsWith(EventTypes.AGGREGATE_PAYMENT + "_")) {
             return KafkaTopicConfig.TOPIC_PAYMENTS;
         }
-        if (eventType.startsWith("INVENTORY_")) {
+        if (eventType.startsWith(EventTypes.AGGREGATE_INVENTORY + "_")) {
             return KafkaTopicConfig.TOPIC_INVENTORY;
         }
-        if (eventType.startsWith("NOTIFICATION_")) {
+        if (eventType.startsWith(EventTypes.AGGREGATE_NOTIFICATION + "_")) {
             return KafkaTopicConfig.TOPIC_NOTIFICATIONS;
         }
         return KafkaTopicConfig.TOPIC_ORDERS;
