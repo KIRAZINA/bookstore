@@ -23,7 +23,7 @@ The Bookstore API is a production-ready Spring Boot 4.0 REST API implementing an
 **External Dependencies:**
 - PostgreSQL 16 (database)
 - Redis 7 (caching, rate limiting, session)
-- Apache Kafka 4.0 (event streaming)
+- Apache Kafka 4.1 (event streaming)
 - SMTP server (email notifications - optional, logging sender by default)
 
 ### High-Level Paradigm
@@ -39,10 +39,8 @@ bookstore/
 ├── .github/
 │   ├── workflows/          # CI/CD pipelines (ci.yml, reusable-*.yml, codeql-analysis.yml)
 │   ├── actions/java-setup/ # Reusable Java/Maven setup action
-│   ├── dependabot.yml      # Dependency update automation
-│   └── modernize/          # Java upgrade hooks
+│   └── dependabot.yml      # Dependency update automation
 ├── .mvn/wrapper/           # Maven wrapper
-├── .vscode/                # VS Code settings and launch configs
 ├── grafana/
 │   ├── dashboards/         # Grafana dashboard JSON definitions
 │   └── datasources/        # Prometheus/Tempo datasource configs
@@ -922,152 +920,31 @@ sequenceDiagram
 
 ---
 
-## 11. Empirical Observations & Codebase Quirks
+## 11. Design Notes & Known Limitations
 
-### Idiosyncrasies
+This section records design decisions and deliberate trade-offs that a reader touching the code should know about.
 
-1. **Deprecated `Book.stock` Field**:
-   - `@Deprecated` on `Book.stock` with comment "book.stock is DEPRECATED. The inventory table is the source of truth"
-   - V6 migration copies `book.stock` → `inventory.available_quantity`
-   - `BookService.updateStock()` now updates inventory only (via `inventoryAdminService.adjustInventory()`); `book.stock` is no longer written and is kept purely for backward compatibility
-   - `BookController.toBookResponse()` returns both `stock` and `availableQuantity` (same value from inventory)
+### Data Model & Persistence
+- **`Book.stock` is deprecated.** The inventory table is the single source of truth for quantity (the V6 migration copied `book.stock` into `inventory.available_quantity`). `BookService.updateStock()` updates inventory only; the `stock` field is retained for backward compatibility, and `BookController.toBookResponse()` returns both `stock` and `availableQuantity` from the inventory value.
+- **Lombok for plain data entities.** `Payment`, `OrderStatusHistory`, `PaymentHistory`, and `EmailLog` use Lombok accessors; hand-written accessors are reserved for domain behavior (e.g. `Order.setItems`, `Cart.setItems`).
+- **Inventory mutations are idempotent.** Releases and restores are guarded by `InventoryHistory` checks (`existsByBookIdAndOrderIdAndEventType`), so `PaymentService.completeRefund()` and `OrderService.adminCancelOrder()` invoking the same restore for one order cannot double-restore stock.
+- **Flyway is the single migration entry point.** `FlywayConfig` runs migrations at startup and is gated by `spring.flyway.enabled`. Spring Boot's Flyway auto-configuration is inactive on this classpath (Flyway 11 no longer ships the `DatabaseFactory` class its condition requires), so the schema is migrated exactly once per clean database — verified by the `flyway_schema_history` assertions in `DatabaseFlywayIntegrationTest`.
 
-2. **Lombok Accessors on Entities**:
-   - `Payment`, `OrderStatusHistory`, `PaymentHistory`, `EmailLog` use Lombok `@Getter`/`@Setter`/`@NoArgsConstructor`
-   - Remaining hand-written accessors are limited to domain behavior (e.g. `Order.setItems`, `Cart.setItems`)
+### Concurrency & Resilience
+- **Rate limiting fails open only on Redis connectivity failures.** `RedisRateLimiter.tryConsume()` allows the request when the Redis call fails with a connection-level error, trading enforcement for availability during outages; non-connection exceptions propagate so unrelated bugs are not silently swallowed.
+- **Deadlock avoidance in batch reservation.** `InventoryService.reserveAll()` sorts items by `bookId` before acquiring pessimistic locks.
+- **Retry, not circuit-breaking.** Inventory operations use `@Retryable`; the payment and email paths have retry logic (email only) but no circuit breaker, so external-call failures fail fast.
 
-3. **Inventory Restore Idempotency**:
-   - `InventoryService.restoreAllStockForOrder()` is guarded by idempotency checks (`existsByBookIdAndOrderIdAndEventType`), so double-invocation from `PaymentService.completeRefund()` + `OrderService.adminCancelOrder()` for the same order no longer double-restores stock
-   - The same guard protects `releaseReservation()` and `restoreStock()`
+### Event-Driven Architecture & Notifications
+- **Two mutually exclusive notification paths.** `app.notifications.delivery-mode` selects in-process delivery (`NotificationEventHandler`, a transactional `AFTER_COMMIT` listener, used in test profiles) or Kafka delivery (`NotificationEventConsumer`, subscribed to `orders.events`, `payments.events`, and `notifications.events`). The two paths are mutually exclusive, so one event produces at most one email.
+- **Consumers are idempotent and extensibility-focused.** `OrderEventConsumer`, `PaymentEventConsumer`, and `InventoryEventConsumer` deduplicate via `ProcessedEvent`, record an `EVENT_CONSUMED` audit entry, and exist for future external-system integration; current business logic runs in the synchronous service layer.
+- **Distributed trace propagation.** A `CorrelationIdFilter` seeds the MDC and response header; `OutboxEventPublisher` captures the producing OpenTelemetry span id into `event_outbox.span_id` (V8); `OutboxPublisherScheduler` attaches a W3C `traceparent` Kafka header that `AbstractIdempotentConsumer` continues.
+- **Topic naming is derived.** `OutboxPublisherScheduler.resolveTopic()` maps event types to topics via the `EventTypes` aggregate prefixes; `KafkaTopicConfig` is the single source of topic names.
 
-4. **Rate Limiter Fail-Open**:
-   - `RedisRateLimiter.tryConsume()` fails open only on Redis connectivity failures (`RedisConnectionFailureException`/`RedisSystemException`), returning `true` (allows request)
-   - Other exceptions propagate so non-Redis bugs are not silently swallowed
-   - Availability-over-enforcement during Redis outages, by design
-
-5. **Notification Delivery Modes (in-process vs Kafka)**:
-   - `OutboxEventPublisher.publish()` saves to outbox AND calls `legacyPublisher.publishEvent(event)` — the local publish is consumed by `NotificationEventHandler` (`@TransactionalEventListener(AFTER_COMMIT)`) for in-process email delivery
-   - `app.notifications.delivery-mode` selects the path: `in-process` (test profiles) uses `NotificationEventHandler`; `kafka` (default at runtime) uses `NotificationEventConsumer`, which subscribes to `orders.events`, `payments.events` and `notifications.events`
-   - The two paths are mutually exclusive, so emails are never sent twice for the same event
-
-6. **Kafka Consumer Behavior**:
-   - `OrderEventConsumer`, `PaymentEventConsumer`, `InventoryEventConsumer` record consumed events in the audit log (`EVENT_CONSUMED`) and exist for future extensibility / external system integration
-   - Actual business logic is triggered by synchronous service calls; consumers are idempotent and deduplicated via `ProcessedEvent`
-
-7. **Sorted Book IDs for Deadlock Prevention**:
-   - `InventoryService.reserveAll()` sorts entries by bookId before acquiring pessimistic locks
-   - Explicit deadlock avoidance pattern in batch reservation
-
-8. **Email Template Engine Simplicity**:
-   - Simple `{{placeholder}}` replacement via `String.replace()`
-   - Unsupplied placeholders are neutralized so rendered emails never leak raw template syntax
-   - No template engine (Thymeleaf, FreeMarker) — lightweight but limited
-
-9. **Payment Provider Abstraction with Single Implementation**:
-   - `PaymentProvider` interface + `DummyPaymentProvider` only
-   - Designed for pluggability but no Stripe/PayPal/etc. implementations present
-
-10. **Distributed Trace Propagation**:
-    - `CorrelationIdFilter` sets MDC + response header
-    - `OutboxEventPublisher` captures `trace_id`/`span_id` from the OpenTelemetry span at publish time
-    - `OutboxPublisherScheduler` injects a W3C `traceparent` Kafka header; `AbstractIdempotentConsumer` extracts it and continues the trace (unless the OTel agent has already started a child span for the consumer)
-
-### Technical Debt & Legacy Patterns
-
-1. **Lombok Accessors**: Standardized on Lombok for plain data entities (see quirk #2).
-
-2. **No API Versioning Strategy Beyond URL**:
-   - Only `/api/v1/` present
-   - No deprecation headers, sunset policies, or version negotiation
-
-3. **Topic & Event-Type Naming**:
-   - `resolveTopic()` derives topics from `EventTypes` aggregate prefixes; `NotificationEventConsumer` uses `EventTypes` constants
-   - `KafkaTopicConfig` remains the single source of topic names
-
-4. **Distributed Tracing Context Propagation to Kafka**:
-   - Implemented (see quirk #10): span context is injected as a W3C `traceparent` header by `OutboxPublisherScheduler` and continued in `AbstractIdempotentConsumer`; `event_outbox.span_id` (V8) stores the publishing span
-
-5. **Test Profile Uses Testcontainers But Not Kafka**:
-   - `AbstractIntegrationTest` starts PostgreSQL + Redis containers
-   - Kafka conditionally enabled via `@ConditionalOnProperty(spring.kafka.bootstrap-servers)`
-   - Integration tests may not exercise Kafka paths unless explicitly configured (`@EmbeddedKafka`)
-
-6. **Flyway Migration Entry Point**:
-   - Verified empirically: the schema migrates exactly once at startup
-   - Spring Boot 4's Flyway auto-configuration is inactive because Flyway 11 no longer ships the `DatabaseFactory` class its condition requires; `FlywayConfig` is the sole migration trigger
-   - `spring.flyway.enabled` gates `FlywayConfig`; the `locations`/`baseline-on-migrate` keys mirror its hardcoded settings
-
-7. **Missing Circuit Breaker**:
-   - `@Retryable` on inventory operations but no circuit breaker for external calls (payment provider, email)
-   - Fail-fast on payment/email failures with retry logic in `EmailService` only
-
-8. **No Request/Response Compression**:
-   - No `spring.mvc.async.request-timeout` or GZIP filter configured
-   - Ingress has gzip enabled but application doesn't
-
-9. **Single `DummyPaymentProvider`**:
-   - Always returns success with synthetic transaction ID
-   - Failure paths are exercised by mocking the provider in `PaymentProviderChaosTest` (a `@SpringBootTest` in the default suite), not by separate chaos implementations
-
-10. **Audit Log Sanitization Minimal**:
-    - `AuditService.sanitize()` only replaces newlines/tabs
-    - No PII masking, length limits, or structured formatting (accepted limitation)
-
-### Notable Strengths
-
-1. **Comprehensive Outbox Pattern Implementation**:
-   - Transactional outbox with dedicated scheduler, retry logic, DLQ, cleanup scheduler
-   - Idempotent consumers with composite PK deduplication
-   - Metrics for every stage (published, consumed, failed, DLT)
-
-2. **Robust Inventory Concurrency Control**:
-   - Optimistic locking with `@Retryable` for single operations
-   - Pessimistic locking with sorted keys for batch reservations
-   - Full audit history (`InventoryHistory`) with event types
-
-3. **State Machine Enforcement in Domain**:
-   - `OrderStatus.canTransitionTo()`, `PaymentStatus.canTransitionTo()` prevent invalid transitions
-   - `recordTransition()` methods on entities throw on invalid transitions
-
-4. **Production-Grade Kubernetes Manifests**:
-   - Proper probe configuration (startup/readiness/liveness with different thresholds)
-   - Pod anti-affinity, priority class, PDB, resource quotas, network policies
-   - Init container for migrations, preStop hook for graceful drain
-   - Non-root, read-only fs, dropped capabilities, seccomp profile
-   - HPA with CPU/memory metrics, conservative scale-down
-
-5. **Multi-Layer Security**:
-   - JWT with proper validation (secret length, clock skew, expiration)
-   - Rate limiting at filter level with Redis backend
-   - Input validation on all DTOs with detailed error responses
-   - Security headers, CORS, stateless sessions
-   - Audit logging for auth/admin actions
-
-6. **Observability First Design**:
-   - 33 business metrics + messaging metrics + JVM/HTTP defaults
-   - Structured JSON logging with correlation/trace IDs
-   - OpenTelemetry Java agent with auto-instrumentation
-   - Health endpoints separated (liveness/readiness/startup)
-   - Grafana dashboards provisioned as code
-
-7. **Comprehensive Test Strategy**:
-   - Unit, integration, controller, E2E, chaos, security, performance test types
-   - Testcontainers for real dependencies (PostgreSQL, Redis)
-   - Separate Maven profiles for CI, performance, chaos
-   - JaCoCo coverage gates (60% line, 50% branch)
-   - Static analysis (Checkstyle, PMD, SpotBugs, OWASP)
-
-8. **Clean Dependency Architecture**:
-   - Controllers depend on Services, Services depend on Repositories
-   - No circular dependencies detected
-   - Interfaces for pluggability (PaymentProvider, EmailSender, DomainEventPublisher)
-
-9. **Graceful Shutdown Handling**:
-   - Spring Boot `server.shutdown=graceful`, `spring.lifecycle.timeout-per-shutdown-phase=30s`
-   - K8s preStop hook (15s sleep), terminationGracePeriodSeconds=60
-   - ZGC with heap dump on OOM, exit on OOM
-
-10. **Externalized Configuration**:
-    - All environment-specific values via env vars with defaults in `application.yml`
-    - K8s ConfigMap/Secret pattern with ExternalSecret for production
-    - Profile-specific YAML files for dev/test/staging/prod/perf
+### Delivery & API
+- **Email templating is intentionally lightweight.** Templates are `{{placeholder}}` text files rendered with string replacement (no Thymeleaf/FreeMarker). Unsupplied placeholders are neutralized — and logged as a warning — so a rendered email never leaks raw template syntax.
+- **One payment provider implementation.** `PaymentProvider` has a single `DummyPaymentProvider` that always succeeds with a synthetic transaction id; failure paths are exercised by mocking the provider in `PaymentProviderChaosTest`.
+- **No API versioning beyond the URL.** Only `/api/v1/` exists; there are no deprecation headers or sunset policies.
+- **No response compression in the application.** Gzip is handled at the ingress; the Spring MVC layer does not compress responses.
+- **Minimal audit-log sanitization.** `AuditService.sanitize()` replaces newlines and tabs only, accepted as-is without PII masking or length limits.
+- **Test profile defaults to Testcontainers without Kafka.** `AbstractIntegrationTest` boots PostgreSQL and Redis; Kafka is activated only when `spring.kafka.bootstrap-servers` is set (e.g. via `@EmbeddedKafka`), so the default integration suite does not exercise Kafka paths.
