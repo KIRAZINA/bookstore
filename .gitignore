@@ -76,3 +76,8 @@ otel-logs/
 checkstyle-result.xml
 pmd.xml
 spotbugsXml.xml
+
+# AI-agent tooling / task-definition files (not part of the shippable product)
+/AGENTS.md
+/command/
+/agent/
