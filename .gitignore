@@ -81,3 +81,8 @@ spotbugsXml.xml
 /AGENTS.md
 /command/
 /agent/
+
+# Local Kubernetes secrets
+k8s/secret.local.yaml
+k8s/*.local.yaml
+PROJECT_ARCHITECTURE.md
