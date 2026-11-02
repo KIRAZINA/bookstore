@@ -34,6 +34,7 @@ import java.util.Map;
 
 @Service
 public class OrderService {
+    private final PaymentService paymentService;
     private final OrderRepository orderRepository;
     private final OrderStatusHistoryRepository orderStatusHistoryRepository;
     private final CartService cartService;
@@ -54,7 +55,8 @@ public class OrderService {
                         DomainEventPublisher domainEventPublisher,
                         SecurityUtils securityUtils,
                         BusinessMetrics businessMetrics,
-                        InventoryService inventoryService) {
+                        InventoryService inventoryService,
+                        PaymentService paymentService) {
         this.orderRepository = orderRepository;
         this.orderStatusHistoryRepository = orderStatusHistoryRepository;
         this.cartService = cartService;
@@ -65,6 +67,7 @@ public class OrderService {
         this.securityUtils = securityUtils;
         this.businessMetrics = businessMetrics;
         this.inventoryService = inventoryService;
+        this.paymentService = paymentService;
     }
 
     @WithSpan("OrderService.createOrder")
@@ -151,6 +154,24 @@ public class OrderService {
         Order order = orderRepository.findByIdAndUserId(orderId, user.getId())
                 .orElseThrow(() -> new IllegalArgumentException("Order not found or access denied"));
 
+        if (order.getStatus() == OrderStatus.PAID) {
+            Payment payment = paymentRepository.findByOrderId(orderId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Cannot cancel a paid order without a completed payment"));
+
+            if (payment.getPaymentStatus() != PaymentStatus.COMPLETED) {
+                throw new IllegalStateException(
+                        "Cannot cancel a paid order without a completed payment");
+            }
+
+            paymentService.refundPayment(payment.getId(), user.getUsername(),
+                    "Customer cancelled paid order");
+
+            Order reloaded = orderRepository.findById(orderId)
+                    .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
+            return;
+        }
+
         if (!order.getStatus().isCancelable()) {
             throw new IllegalStateException(
                     "Order in status " + order.getStatus() + " cannot be cancelled");
@@ -190,6 +211,27 @@ public class OrderService {
         AppUser admin = securityUtils.getCurrentUser();
         Order order = getOrderById(orderId);
 
+        if (targetStatus == OrderStatus.PAID) {
+            Payment payment = order.getPayment();
+            if (payment == null || payment.getPaymentStatus() != PaymentStatus.COMPLETED) {
+                throw new IllegalStateException(
+                        "Cannot mark order as paid without a completed payment");
+            }
+        }
+
+        if (targetStatus == OrderStatus.CANCELLED && order.getStatus() == OrderStatus.PAID) {
+            Payment payment = order.getPayment();
+            if (payment == null || payment.getPaymentStatus() != PaymentStatus.REFUNDED) {
+                throw new IllegalStateException(
+                        "Cannot cancel a paid order unless payment is refunded");
+            }
+        }
+
+        if (targetStatus == OrderStatus.CANCELLED && order.getStatus() == OrderStatus.PAID) {
+            throw new IllegalStateException(
+                    "Cannot cancel a paid order via status update; use cancel/refund endpoint");
+        }
+
         if (!order.getStatus().canTransitionTo(targetStatus)) {
             throw new IllegalStateException(
                     "Cannot transition from " + order.getStatus() + " to " + targetStatus);
@@ -217,6 +259,22 @@ public class OrderService {
     public void adminCancelOrder(Long orderId, String comment) {
         AppUser admin = securityUtils.getCurrentUser();
         Order order = getOrderById(orderId);
+
+        if (order.getStatus() == OrderStatus.PAID) {
+            Payment payment = paymentRepository.findByOrderId(orderId)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Cannot cancel a paid order without a completed payment"));
+
+            if (payment.getPaymentStatus() != PaymentStatus.COMPLETED) {
+                throw new IllegalStateException(
+                        "Cannot cancel a paid order without a completed payment");
+            }
+
+            paymentService.refundPayment(payment.getId(), admin.getUsername(),
+                    "Admin cancelled paid order");
+
+            return;
+        }
 
         if (!order.getStatus().isCancelable()) {
             throw new IllegalStateException(

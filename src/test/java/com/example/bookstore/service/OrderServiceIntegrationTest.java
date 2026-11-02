@@ -1,5 +1,6 @@
 package com.example.bookstore.service;
 
+import com.example.bookstore.base.AbstractIntegrationTest;
 import com.example.bookstore.config.SecurityUtils;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.BookRepository;
@@ -11,9 +12,7 @@ import com.example.bookstore.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -23,13 +22,13 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest
 @Transactional
-@ActiveProfiles("test")
-class OrderServiceIntegrationTest {
+class OrderServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private OrderService orderService;
+    @Autowired
+    private PaymentService paymentService;
 
     @Autowired
     private CartService cartService;
@@ -127,16 +126,15 @@ class OrderServiceIntegrationTest {
     void orderStatusTransition_PersistsHistory() {
         AppUser user = createUser();
         Book book = createBook("Transition Test Book", new BigDecimal("15.00"), 10);
-        Order order = createOrder(user, book, 1);
+          Order order = createOrder(user, book, 1);
 
-        assertNotNull(order.getId());
-        assertEquals(OrderStatus.PENDING, order.getStatus());
+          when(securityUtils.getCurrentUser()).thenReturn(user);
+          paymentService.processPayment(order.getId(), "CREDIT_CARD");
 
-        orderService.updateOrderStatus(order.getId(), OrderStatus.PAID, "Payment processed");
-        Order paidOrder = orderRepository.findById(order.getId()).orElseThrow();
-        assertEquals(OrderStatus.PAID, paidOrder.getStatus());
+          Order paidOrder = orderRepository.findById(order.getId()).orElseThrow();
+          assertEquals(OrderStatus.PAID, paidOrder.getStatus());
 
-        orderService.updateOrderStatus(order.getId(), OrderStatus.PROCESSING, "Fulfillment started");
+          orderService.updateOrderStatus(order.getId(), OrderStatus.PROCESSING, "Fulfillment started");
         Order processingOrder = orderRepository.findById(order.getId()).orElseThrow();
         assertEquals(OrderStatus.PROCESSING, processingOrder.getStatus());
 
@@ -172,21 +170,39 @@ class OrderServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("Admin can cancel PAID order")
-    void adminCancelsPaidOrder_Success() {
+    @DisplayName("Admin cancels PAID order with completed payment: refunds, cancels, restores inventory")
+    void adminCancelPaidOrder_withCompletedPayment_refundsCancelsAndRestoresInventory() {
         AppUser user = createUser();
         Book book = createBook("Admin Cancel Book", new BigDecimal("10.00"), 5);
         Order order = createOrder(user, book, 1);
 
-        orderService.updateOrderStatus(order.getId(), OrderStatus.PAID, "Paid");
+        when(securityUtils.getCurrentUser()).thenReturn(user);
+        paymentService.processPayment(order.getId(), "CREDIT_CARD");
 
         AppUser admin = new AppUser();
         admin.setUsername("admin");
         when(securityUtils.getCurrentUser()).thenReturn(admin);
 
+        Inventory invBefore = inventoryRepository.findByBookId(book.getId()).orElseThrow();
+        int availableBefore = invBefore.getAvailableQuantity();
+        int reservedBefore = invBefore.getReservedQuantity();
+
         orderService.adminCancelOrder(order.getId(), "Admin cancellation");
+
         Order cancelledOrder = orderRepository.findById(order.getId()).orElseThrow();
         assertEquals(OrderStatus.CANCELLED, cancelledOrder.getStatus());
+
+        Payment payment = paymentRepository.findByOrderId(order.getId()).orElseThrow();
+        assertEquals(PaymentStatus.REFUNDED, payment.getPaymentStatus());
+
+        Inventory invAfter = inventoryRepository.findByBookId(book.getId()).orElseThrow();
+        assertEquals(availableBefore + 1, invAfter.getAvailableQuantity());
+
+        List<OrderStatusHistory> history = orderStatusHistoryRepository.findByOrderIdOrderByCreatedAtAsc(order.getId());
+        assertTrue(history.stream().anyMatch(h -> h.getNewStatus() == OrderStatus.CANCELLED));
+
+        List<PaymentHistory> payHistory = paymentService.getPaymentHistory(payment.getId());
+        assertTrue(payHistory.stream().anyMatch(h -> h.getNewStatus() == PaymentStatus.REFUNDED));
     }
 
     @Test
@@ -194,14 +210,14 @@ class OrderServiceIntegrationTest {
     void historyRecordedForEachTransition() {
         AppUser user = createUser();
         Book book = createBook("History Test Book", new BigDecimal("10.00"), 5);
-        Order order = createOrder(user, book, 1);
+          Order order = createOrder(user, book, 1);
 
-        when(securityUtils.getCurrentUser()).thenReturn(user);
+          when(securityUtils.getCurrentUser()).thenReturn(user);
+          paymentService.processPayment(order.getId(), "CREDIT_CARD");
 
-        orderService.updateOrderStatus(order.getId(), OrderStatus.PAID, "Paid");
-        orderService.updateOrderStatus(order.getId(), OrderStatus.PROCESSING, "Processing");
-        orderService.updateOrderStatus(order.getId(), OrderStatus.SHIPPED, "Shipped");
-        orderService.updateOrderStatus(order.getId(), OrderStatus.DELIVERED, "Delivered");
+          orderService.updateOrderStatus(order.getId(), OrderStatus.PROCESSING, "Processing");
+          orderService.updateOrderStatus(order.getId(), OrderStatus.SHIPPED, "Shipped");
+          orderService.updateOrderStatus(order.getId(), OrderStatus.DELIVERED, "Delivered");
 
         List<OrderStatusHistory> history = orderService.getOrderHistory(order.getId());
         assertEquals(4, history.size());

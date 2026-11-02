@@ -1,5 +1,6 @@
 package com.example.bookstore.service;
 
+import com.example.bookstore.base.AbstractIntegrationTest;
 import com.example.bookstore.config.SecurityUtils;
 import com.example.bookstore.exception.InvalidPaymentStateException;
 import com.example.bookstore.model.*;
@@ -8,9 +9,7 @@ import com.example.bookstore.service.InventoryAdminService;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
@@ -20,10 +19,8 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest
 @Transactional
-@ActiveProfiles("test")
-class PaymentServiceIntegrationTest {
+class PaymentServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private PaymentService paymentService;
@@ -162,8 +159,8 @@ class PaymentServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("Refund completed payment sets status to REFUNDED")
-    void refundCompletedPayment() {
+    @DisplayName("Refund completed payment for PAID order cancels order and records history")
+    void refundCompletedPayment_forPaidOrder_cancelsOrderAndRecordsHistory() {
         AppUser user = createUser();
         Book book = createBook("Refund Payment Book", new BigDecimal("50.00"), 5);
         Order order = createOrder(user, book, 1);
@@ -173,6 +170,15 @@ class PaymentServiceIntegrationTest {
 
         Payment refunded = paymentService.refundPayment(processed.getId());
         assertEquals(PaymentStatus.REFUNDED, refunded.getPaymentStatus());
+
+        Order cancelledOrder = orderRepository.findById(order.getId()).orElseThrow();
+        assertEquals(OrderStatus.CANCELLED, cancelledOrder.getStatus());
+
+        List<PaymentHistory> payHistory = paymentService.getPaymentHistory(refunded.getId());
+        assertTrue(payHistory.stream().anyMatch(h -> h.getNewStatus() == PaymentStatus.REFUNDED));
+
+        List<OrderStatusHistory> orderHistory = orderService.getOrderHistory(order.getId());
+        assertTrue(orderHistory.stream().anyMatch(h -> h.getNewStatus() == OrderStatus.CANCELLED));
     }
 
     @Test
@@ -204,6 +210,9 @@ class PaymentServiceIntegrationTest {
 
         Payment refunded = paymentService.refundPayment(payment.getId());
         assertEquals(PaymentStatus.REFUNDED, refunded.getPaymentStatus());
+
+        Order cancelledOrder = orderRepository.findById(order.getId()).orElseThrow();
+        assertEquals(OrderStatus.CANCELLED, cancelledOrder.getStatus());
 
         List<PaymentHistory> history = paymentService.getPaymentHistory(payment.getId());
         assertEquals(4, history.size());

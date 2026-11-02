@@ -1,5 +1,7 @@
 package com.example.bookstore.service;
 
+import com.example.bookstore.config.SecurityUtils;
+import org.springframework.security.access.AccessDeniedException;
 import com.example.bookstore.event.EventTypes;
 import com.example.bookstore.event.PaymentCompletedEvent;
 import com.example.bookstore.event.PaymentFailedEvent;
@@ -26,6 +28,7 @@ import java.util.Map;
 @Service
 public class PaymentService {
 
+    private final SecurityUtils securityUtils;
     private final PaymentRepository paymentRepository;
     private final PaymentHistoryRepository paymentHistoryRepository;
     private final OrderRepository orderRepository;
@@ -40,7 +43,8 @@ public class PaymentService {
                           DummyPaymentProvider paymentProvider,
                           DomainEventPublisher domainEventPublisher,
                           BusinessMetrics businessMetrics,
-                          InventoryService inventoryService) {
+                          InventoryService inventoryService,
+                          SecurityUtils securityUtils) {
         this.paymentRepository = paymentRepository;
         this.paymentHistoryRepository = paymentHistoryRepository;
         this.orderRepository = orderRepository;
@@ -48,6 +52,7 @@ public class PaymentService {
         this.domainEventPublisher = domainEventPublisher;
         this.businessMetrics = businessMetrics;
         this.inventoryService = inventoryService;
+        this.securityUtils = securityUtils;
     }
 
     private Map<Long, Integer> getOrderItemQuantities(Order order) {
@@ -66,8 +71,13 @@ public class PaymentService {
     }
 
     public Payment getPaymentByOrderId(Long orderId) {
-        return paymentRepository.findByOrderId(orderId)
-                .orElseThrow(() -> new PaymentException("No payment found for order: " + orderId));
+        Long currentUserId = securityUtils.getCurrentUser().getId();
+        Payment payment = paymentRepository.findByOrderId(orderId)
+                .orElseThrow(() -> new AccessDeniedException("Access denied"));
+        if (orderRepository.findByIdAndUserId(orderId, currentUserId).isEmpty()) {
+            throw new AccessDeniedException("Access denied");
+        }
+        return payment;
     }
 
     public Payment getPaymentById(Long paymentId) {
@@ -78,9 +88,13 @@ public class PaymentService {
     @WithSpan("PaymentService.processPayment")
     @Transactional
     public Payment processPayment(Long orderId, String paymentMethod) {
-        Payment payment = initializeProcessing(orderId, paymentMethod);
-        PaymentProviderResponse providerResponse = paymentProvider.processPayment(payment);
-        return completeProcessing(payment, providerResponse);
+        Payment payment = getPaymentByOrderId(orderId);
+        if (payment.getOrder().getStatus() == OrderStatus.CANCELLED) {
+            throw new IllegalStateException("Cannot process payment for a cancelled order");
+        }
+        Payment initialized = initializeProcessing(orderId, paymentMethod);
+        PaymentProviderResponse providerResponse = paymentProvider.processPayment(initialized);
+        return completeProcessing(initialized, providerResponse);
     }
 
     @Transactional
@@ -167,9 +181,48 @@ public class PaymentService {
     @WithSpan("PaymentService.refundPayment")
     @Transactional
     public Payment refundPayment(Long paymentId) {
-        Payment payment = initializeRefund(paymentId);
-        PaymentProviderResponse providerResponse = paymentProvider.refundPayment(payment);
-        return completeRefund(payment, providerResponse);
+        String actor = "system";
+        try {
+            AppUser current = securityUtils.getCurrentUser();
+            if (current != null && current.getUsername() != null) {
+                actor = current.getUsername();
+            }
+        } catch (RuntimeException e) {
+            actor = "system";
+        }
+        return refundPayment(paymentId, actor, "Payment refunded; order cancelled");
+    }
+
+    @WithSpan("PaymentService.refundPayment")
+    @Transactional
+    public Payment refundPayment(Long paymentId, String actor, String reason) {
+        Payment payment = getPaymentById(paymentId);
+
+        if (payment.getPaymentStatus() != PaymentStatus.COMPLETED) {
+            throw new InvalidPaymentStateException(
+                    "Payment cannot be refunded in the current order state");
+        }
+
+        Order order = payment.getOrder();
+        if (order == null || order.getStatus() != OrderStatus.PAID) {
+            throw new InvalidPaymentStateException(
+                    "Payment cannot be refunded in the current order state");
+        }
+
+        Payment initialized = initializeRefund(paymentId);
+        PaymentProviderResponse providerResponse = paymentProvider.refundPayment(initialized);
+        Payment finalPayment = completeRefund(initialized, providerResponse);
+
+        if (finalPayment.getPaymentStatus() == PaymentStatus.REFUNDED) {
+            Order reloadedOrder = orderRepository.findById(order.getId())
+                    .orElseThrow(() -> new PaymentException("Order not found: " + order.getId()));
+            if (reloadedOrder.getStatus() == OrderStatus.PAID) {
+                reloadedOrder.recordTransition(OrderStatus.CANCELLED, actor, reason);
+                orderRepository.save(reloadedOrder);
+            }
+        }
+
+        return finalPayment;
     }
 
     @Transactional
