@@ -1,3 +1,0 @@
-# AUDIT_REGISTER
-
-M21/direct bypass CLOSED_PATH_INVARIANT_RED (curator-verified). R4 ACCEPTED_PROVISIONAL. C27 deferred.

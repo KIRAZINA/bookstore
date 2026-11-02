@@ -1,3 +1,0 @@
-# WAVE2B_1_REPORT
-
-M21 and direct bypass = CLOSED_PATH_INVARIANT_RED. C26/M12/M15/M22/T3 = CLOSED_GREEN_ONLY_RED_DEBT. R4 = ACCEPTED_PROVISIONAL. Green: 9+7+8+5=29, 0 failures. Only test files changed.

@@ -86,3 +86,5 @@ spotbugsXml.xml
 k8s/secret.local.yaml
 k8s/*.local.yaml
 PROJECT_ARCHITECTURE.md
+WAVE2B_1_REPORT.md
+AUDIT_REGISTER.md
