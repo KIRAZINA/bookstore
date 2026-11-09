@@ -80,3 +80,6 @@ spotbugsXml.xml
 # Local Kubernetes secrets
 k8s/secret.local.yaml
 k8s/*.local.yaml
+
+# Curator-managed audit register (local only, not tracked)
+AUDIT_REGISTER.md
