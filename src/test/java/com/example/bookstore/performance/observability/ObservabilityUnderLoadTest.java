@@ -8,6 +8,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Tag;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -43,6 +44,7 @@ class ObservabilityUnderLoadTest extends AbstractPerformanceTest {
     }
 
     @Test
+    @Timeout(value = 120, unit = TimeUnit.SECONDS)
     @DisplayName("Section 11: Prometheus metrics available under concurrent API load")
     void prometheusAvailableUnderLoad() throws InterruptedException {
         AtomicInteger apiSuccess = new AtomicInteger();
@@ -53,7 +55,7 @@ class ObservabilityUnderLoadTest extends AbstractPerformanceTest {
             for (int i = 0; i < CONCURRENT_REQUESTS; i++) {
                 executor.submit(() -> {
                     try {
-                        startGate.await();
+                        startGate.await(30, TimeUnit.SECONDS);
                         ResponseEntity<String> response = restTemplate.getForEntity(
                                 baseUrl() + "/api/v1/books",
                                 String.class

@@ -22,7 +22,7 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
-@Transactional
+// No class-level transaction: REQUIRES_NEW boundaries require committed data visibility.
 class OrderServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
@@ -98,9 +98,9 @@ class OrderServiceIntegrationTest extends AbstractIntegrationTest {
         assertEquals(1, createdOrder.getItems().size());
 
         OrderItem item = createdOrder.getItems().get(0);
-        assertEquals(new BigDecimal("10.00"), item.getUnitPrice());
-        assertEquals(new BigDecimal("20.00"), item.getSubtotal());
-        assertEquals(new BigDecimal("20.00"), createdOrder.getTotalPrice());
+        assertEquals(new BigDecimal("10.0000"), item.getUnitPrice());
+        assertEquals(new BigDecimal("20.0000"), item.getSubtotal());
+        assertEquals(new BigDecimal("20.0000"), createdOrder.getTotalPrice());
 
         Inventory inventory = inventoryRepository.findByBookId(book.getId()).orElseThrow();
         assertEquals(8, inventory.getAvailableQuantity());
@@ -117,7 +117,7 @@ class OrderServiceIntegrationTest extends AbstractIntegrationTest {
         assertTrue(paymentRepository.findByOrderId(order.getId()).isPresent());
         com.example.bookstore.model.Payment payment = paymentRepository.findByOrderId(order.getId()).orElseThrow();
         assertEquals(com.example.bookstore.model.PaymentStatus.PENDING, payment.getPaymentStatus());
-        assertEquals(new BigDecimal("50.00"), payment.getAmount());
+        assertEquals(new BigDecimal("50.0000"), payment.getAmount());
         assertEquals("DUMMY", payment.getPaymentProvider());
     }
 

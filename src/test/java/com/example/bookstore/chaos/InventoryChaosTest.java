@@ -1,5 +1,6 @@
 package com.example.bookstore.chaos;
 
+import com.example.bookstore.base.AbstractIntegrationTest;
 import com.example.bookstore.model.Book;
 import com.example.bookstore.model.Inventory;
 import com.example.bookstore.repository.BookRepository;
@@ -8,22 +9,20 @@ import com.example.bookstore.service.InventoryService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 
 import java.math.BigDecimal;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
 
-@SpringBootTest
-@ActiveProfiles("test")
 @DisplayName("Inventory chaos tests — concurrency, overselling, consistency")
-class InventoryChaosTest {
+class InventoryChaosTest extends AbstractIntegrationTest {
 
     private static final int STOCK = 10;
     private static final int THREADS = 20;
@@ -56,6 +55,7 @@ class InventoryChaosTest {
     }
 
     @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
     @DisplayName("Should prevent overselling under high concurrent load")
     void shouldPreventOversellingUnderConcurrency() throws InterruptedException {
         AtomicInteger successes = new AtomicInteger(0);
@@ -68,7 +68,7 @@ class InventoryChaosTest {
                 final long orderId = i + 1;
                 executor.submit(() -> {
                     try {
-                        startLatch.await();
+                        startLatch.await(60, TimeUnit.SECONDS);
                         inventoryService.reserve(testBook.getId(), 1, orderId, "user-" + orderId);
                         successes.incrementAndGet();
                     } catch (Exception e) {
@@ -79,7 +79,8 @@ class InventoryChaosTest {
                 });
             }
             startLatch.countDown();
-            doneLatch.await();
+            assertTrue(doneLatch.await(60, TimeUnit.SECONDS),
+                    "Concurrent reservations did not finish within 60 seconds");
         }
 
         Inventory finalInventory = inventoryRepository.findByBookId(testBook.getId()).orElseThrow();

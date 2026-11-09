@@ -77,14 +77,6 @@ checkstyle-result.xml
 pmd.xml
 spotbugsXml.xml
 
-# AI-agent tooling / task-definition files (not part of the shippable product)
-/AGENTS.md
-/command/
-/agent/
-
 # Local Kubernetes secrets
 k8s/secret.local.yaml
 k8s/*.local.yaml
-PROJECT_ARCHITECTURE.md
-WAVE2B_1_REPORT.md
-AUDIT_REGISTER.md

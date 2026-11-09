@@ -140,6 +140,9 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
 
         assertEquals(PaymentStatus.REFUNDED, refunded.getPaymentStatus());
 
+        Order reloadedOrder = orderService.getOrderById(order.getId());
+        assertEquals(OrderStatus.CANCELLED, reloadedOrder.getStatus());
+
         Inventory inventory = inventoryRepository.findByBookId(book.getId()).orElseThrow();
         assertEquals(10, inventory.getAvailableQuantity(),
                 "Stock should be restored to original after refund");
@@ -169,10 +172,14 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Cancelling pending payment leaves order in PENDING")
-    void cancelPendingPayment_OrderRemainsPending() {
+    @DisplayName("Cancelling pending payment releases reservation and cancels order")
+    void cancelPendingPayment_releasesReservationAndCancelsOrder() {
         cartService.addToCart(book.getId(), 1);
         Order order = orderService.createOrder();
+
+        Inventory invBefore = inventoryRepository.findByBookId(book.getId()).orElseThrow();
+        int availableBefore = invBefore.getAvailableQuantity();
+        int reservedBefore = invBefore.getReservedQuantity();
 
         paymentService.cancelPayment(order.getId());
 
@@ -180,7 +187,11 @@ class PaymentIntegrationTest extends AbstractIntegrationTest {
         assertEquals(PaymentStatus.CANCELLED, payment.getPaymentStatus());
 
         Order reloaded = orderService.getOrderById(order.getId());
-        assertEquals(OrderStatus.PENDING, reloaded.getStatus());
+        assertEquals(OrderStatus.CANCELLED, reloaded.getStatus());
+
+        Inventory invAfter = inventoryRepository.findByBookId(book.getId()).orElseThrow();
+        assertEquals(availableBefore + 1, invAfter.getAvailableQuantity());
+        assertEquals(reservedBefore - 1, invAfter.getReservedQuantity());
     }
 
     @Test

@@ -85,7 +85,7 @@ info:
     environment: dev
 
 jwt:
-  secret: ${JWT_SECRET:dev-jwt-secret-that-is-at-least-256-bits-long-for-hs256}
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:1800000}
   clock-skew-seconds: 30
 

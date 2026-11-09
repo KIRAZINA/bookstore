@@ -6,11 +6,11 @@ import com.example.bookstore.exception.InvalidPaymentStateException;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.*;
 import com.example.bookstore.service.InventoryAdminService;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
-import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -19,7 +19,15 @@ import java.util.UUID;
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
-@Transactional
+/**
+ * This class is intentionally NOT class-level {@code @Transactional}.
+ *
+ * <p>{@link PaymentService} fences its phases with {@code REQUIRES_NEW}, which opens
+ * a new transaction that can only observe data already committed by the test. Under a
+ * class-level test transaction the fixture rows are never committed, so the phase
+ * fence cannot see them. Each test therefore commits its own fixture data, and
+ * {@link #cleanUp()} removes it before the next test.
+ */
 class PaymentServiceIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
@@ -47,7 +55,25 @@ class PaymentServiceIntegrationTest extends AbstractIntegrationTest {
     private SecurityUtils securityUtils;
 
     @Autowired
+    private InventoryRepository inventoryRepository;
+
+    @Autowired
     private InventoryAdminService inventoryAdminService;
+
+    /**
+     * Without a class-level test transaction, data written by a test is committed and
+     * would otherwise leak into the next test. Cleanup runs in safe
+     * foreign-key order: payments, then orders (cascading order history/items), then
+     * inventory, books, and users (cascading carts).
+     */
+    @BeforeEach
+    void cleanUp() {
+        paymentRepository.deleteAll();
+        orderRepository.deleteAll();
+        inventoryRepository.deleteAll();
+        bookRepository.deleteAll();
+        userRepository.deleteAll();
+    }
 
     private AppUser createUser() {
         AppUser user = new AppUser();
@@ -87,7 +113,9 @@ class PaymentServiceIntegrationTest extends AbstractIntegrationTest {
         Payment payment = paymentService.getPaymentByOrderId(order.getId());
         assertNotNull(payment);
         assertEquals(PaymentStatus.PENDING, payment.getPaymentStatus());
-        assertEquals(new BigDecimal("50.00"), payment.getAmount());
+        // Without a test transaction the payment is reloaded from a DECIMAL(19,4)
+        // column, so compare numerically rather than by scale.
+        assertEquals(0, new BigDecimal("50.00").compareTo(payment.getAmount()));
         assertEquals("DUMMY", payment.getPaymentProvider());
         assertNotNull(payment.getCreatedAt());
     }
@@ -131,18 +159,93 @@ class PaymentServiceIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    @DisplayName("Cancelling PENDING payment sets status to CANCELLED, order stays PENDING")
-    void cancelPendingPayment_RemainsPending() {
+    @DisplayName("Cancel pending payment releases reservation and cancels order")
+    void cancelPendingPayment_releasesReservationAndCancelsOrder() {
         AppUser user = createUser();
         Book book = createBook("Cancel Payment Book", new BigDecimal("20.00"), 5);
         Order order = createOrder(user, book, 1);
 
+        Inventory invBefore = inventoryRepository.findByBookId(book.getId()).orElseThrow();
+        int availableBefore = invBefore.getAvailableQuantity();
+        int reservedBefore = invBefore.getReservedQuantity();
+
+        when(securityUtils.getCurrentUser()).thenReturn(user);
         Payment cancelled = paymentService.cancelPayment(order.getId());
 
         assertEquals(PaymentStatus.CANCELLED, cancelled.getPaymentStatus());
 
-        Order updatedOrder = orderRepository.findById(order.getId()).orElseThrow();
-        assertEquals(OrderStatus.PENDING, updatedOrder.getStatus());
+        Order reloadedOrder = orderRepository.findById(order.getId()).orElseThrow();
+        assertEquals(OrderStatus.CANCELLED, reloadedOrder.getStatus());
+
+        Inventory invAfter = inventoryRepository.findByBookId(book.getId()).orElseThrow();
+        assertEquals(availableBefore + 1, invAfter.getAvailableQuantity());
+        assertEquals(reservedBefore - 1, invAfter.getReservedQuantity());
+
+        List<OrderStatusHistory> history = orderService.getOrderHistory(order.getId());
+        assertTrue(history.stream().anyMatch(h -> h.getNewStatus() == OrderStatus.CANCELLED));
+    }
+
+    @Test
+    @DisplayName("Cancel payment after order cancel is cleanup without duplicate inventory change")
+    void cancelPaymentAfterOrderCancel_isCleanupWithoutDuplicateInventoryChange() {
+        AppUser user = createUser();
+        Book book = createBook("Cancel Payment Cleanup Book", new BigDecimal("20.00"), 5);
+        Order order = createOrder(user, book, 1);
+
+        when(securityUtils.getCurrentUser()).thenReturn(user);
+        orderService.cancelOwnOrder(order.getId());
+
+        Inventory invBefore = inventoryRepository.findByBookId(book.getId()).orElseThrow();
+        int availableBefore = invBefore.getAvailableQuantity();
+        int reservedBefore = invBefore.getReservedQuantity();
+        int orderHistoryBefore = orderService.getOrderHistory(order.getId()).size();
+        Payment payment = paymentRepository.findByOrderId(order.getId()).orElseThrow();
+        int paymentHistoryBefore = paymentService.getPaymentHistory(payment.getId()).size();
+
+        Payment cancelled = paymentService.cancelPayment(order.getId());
+        assertEquals(PaymentStatus.CANCELLED, cancelled.getPaymentStatus());
+
+        Order reloadedOrder = orderRepository.findById(order.getId()).orElseThrow();
+        assertEquals(OrderStatus.CANCELLED, reloadedOrder.getStatus());
+
+        Inventory invAfter = inventoryRepository.findByBookId(book.getId()).orElseThrow();
+        assertEquals(availableBefore, invAfter.getAvailableQuantity());
+        assertEquals(reservedBefore, invAfter.getReservedQuantity());
+
+        assertEquals(orderHistoryBefore, orderService.getOrderHistory(order.getId()).size());
+    }
+
+    @Test
+    @DisplayName("Cancel payment on paid order is rejected without side effects")
+    void cancelPaymentOnPaidOrder_isRejectedWithoutSideEffects() {
+        AppUser user = createUser();
+        Book book = createBook("Cancel Paid Payment Book", new BigDecimal("20.00"), 5);
+        Order order = createOrder(user, book, 1);
+
+        when(securityUtils.getCurrentUser()).thenReturn(user);
+        paymentService.processPayment(order.getId(), "card");
+
+        Inventory invBefore = inventoryRepository.findByBookId(book.getId()).orElseThrow();
+        int availableBefore = invBefore.getAvailableQuantity();
+        int reservedBefore = invBefore.getReservedQuantity();
+        int orderHistoryBefore = orderService.getOrderHistory(order.getId()).size();
+        Payment payment = paymentRepository.findByOrderId(order.getId()).orElseThrow();
+        int paymentHistoryBefore = paymentService.getPaymentHistory(payment.getId()).size();
+
+        assertThrows(InvalidPaymentStateException.class,
+                () -> paymentService.cancelPayment(order.getId()));
+
+        Order reloadedOrder = orderRepository.findById(order.getId()).orElseThrow();
+        assertEquals(OrderStatus.PAID, reloadedOrder.getStatus());
+        Payment reloadedPayment = paymentRepository.findByOrderId(order.getId()).orElseThrow();
+        assertEquals(PaymentStatus.COMPLETED, reloadedPayment.getPaymentStatus());
+
+        Inventory invAfter = inventoryRepository.findByBookId(book.getId()).orElseThrow();
+        assertEquals(availableBefore, invAfter.getAvailableQuantity());
+        assertEquals(reservedBefore, invAfter.getReservedQuantity());
+
+        assertEquals(orderHistoryBefore, orderService.getOrderHistory(order.getId()).size());
+        assertEquals(paymentHistoryBefore, paymentService.getPaymentHistory(reloadedPayment.getId()).size());
     }
 
     @Test

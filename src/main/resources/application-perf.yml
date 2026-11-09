@@ -48,7 +48,7 @@ management:
       access: read_only
 
 jwt:
-  secret: ${JWT_SECRET:perf-jwt-secret-that-is-at-least-256-bits-long-for-hs256}
+  secret: ${JWT_SECRET}
   expiration: ${JWT_EXPIRATION:3600000}
 
 logging:

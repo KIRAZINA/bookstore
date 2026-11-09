@@ -101,6 +101,17 @@ class PaymentControllerIntegrationTest extends AbstractControllerTest {
                         .header("Authorization", "Bearer " + token))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.paymentStatus").value("CANCELLED"));
+
+        // C27: order cancelled
+        mockMvc.perform(get("/api/v1/orders/" + orderId)
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("CANCELLED"));
+
+        // C27: order history contains CANCELLED
+        org.junit.jupiter.api.Assertions.assertTrue(
+                orderService.getOrderHistory(orderId).stream()
+                        .anyMatch(h -> h.getNewStatus() == com.example.bookstore.model.OrderStatus.CANCELLED));
     }
 
     @Test

@@ -9,6 +9,7 @@ import com.example.bookstore.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
 
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
@@ -20,6 +21,7 @@ import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -77,6 +79,7 @@ class InventoryConcurrencyIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
     @DisplayName("20 concurrent reservations for 10 units only succeed 10 times")
     void concurrentReservations_PessimisticLock_PreventsOverselling() throws InterruptedException {
         int threadCount = 20;
@@ -100,7 +103,8 @@ class InventoryConcurrencyIntegrationTest extends AbstractIntegrationTest {
             });
         }
 
-        latch.await();
+        assertTrue(latch.await(60, TimeUnit.SECONDS),
+                "Concurrent reservations did not finish within 60 seconds");
         executor.shutdown();
 
         assertEquals(stock, successCount.get(),
@@ -130,6 +134,7 @@ class InventoryConcurrencyIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    @Timeout(value = 60, unit = TimeUnit.SECONDS)
     @DisplayName("Concurrent release and reserve does not produce inconsistent state")
     void concurrentReleaseAndReserve_ConsistentState() throws InterruptedException {
         inventoryService.reserve(book.getId(), 5, 1L, "user1");
@@ -158,7 +163,8 @@ class InventoryConcurrencyIntegrationTest extends AbstractIntegrationTest {
             }
         });
 
-        latch.await();
+        assertTrue(latch.await(60, TimeUnit.SECONDS),
+                "Concurrent release/reserve did not finish within 60 seconds");
         executor.shutdown();
 
         Inventory finalState = inventoryRepository.findByBookId(book.getId()).orElseThrow();

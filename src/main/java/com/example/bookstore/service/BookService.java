@@ -6,6 +6,11 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.ScanOptions;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -13,6 +18,10 @@ import org.springframework.transaction.annotation.Transactional;
 import java.util.List;
 import java.util.Objects;
 import java.util.Set;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.util.ArrayList;
+import java.util.HexFormat;
 
 import org.springframework.beans.factory.ObjectProvider;
 
@@ -64,9 +73,51 @@ public class BookService {
                 .orElseThrow(() -> new IllegalArgumentException("Book not found: " + id));
     }
 
-    @Cacheable(cacheNames = "books", key = "'search-' + #search")
+    @Cacheable(cacheNames = "books", key = "T(com.example.bookstore.service.BookService).searchCacheKey(#search)")
     public List<Book> searchBooks(String search) {
-        return bookRepository.findByTitleOrAuthor(search);
+        if (search == null) search = "";
+        if (search.trim().length() > 128) {
+            throw new IllegalArgumentException("Search term too long");
+        }
+        return bookRepository.findByTitleOrAuthor(search.trim());
+    }
+
+    public List<Book> getAllBooks(int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("id").ascending());
+        return bookRepository.findAll(pageable).getContent();
+    }
+
+    public List<Book> getBooksByCategory(String category, int page, int size) {
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("id").ascending());
+        return bookRepository.findByCategory(category, pageable);
+    }
+
+    public List<Book> searchBooks(String search, int page, int size) {
+        if (search == null) search = "";
+        String normalized = search.trim();
+        if (normalized.length() > 128) {
+            throw new IllegalArgumentException("Search term too long");
+        }
+        Pageable pageable = PageRequest.of(Math.max(0, page), Math.max(1, size), Sort.by("id").ascending());
+        return bookRepository.findByTitleOrAuthor(normalized, pageable);
+    }
+
+    public static String searchCacheKey(String search) {
+        String normalized = search == null ? "" : search.trim();
+        if (normalized.length() > 128) {
+            throw new IllegalArgumentException("Search term too long");
+        }
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(normalized.getBytes(StandardCharsets.UTF_8));
+            StringBuilder sb = new StringBuilder();
+            for (byte b : digest) {
+                sb.append(String.format("%02x", b));
+            }
+            return sb.toString();
+        } catch (Exception e) {
+            throw new IllegalStateException("Unable to hash search key", e);
+        }
     }
 
     @Transactional
@@ -99,9 +150,19 @@ public class BookService {
     private void evictBooksCache() {
         try {
             if (redisTemplate != null) {
-                Set<String> keys = redisTemplate.keys(BOOKS_PREFIX + "*");
-                if (keys != null && !keys.isEmpty()) {
-                    redisTemplate.delete(keys);
+                ScanOptions options = ScanOptions.scanOptions().match(BOOKS_PREFIX + "*").count(100).build();
+                try (Cursor<String> cursor = redisTemplate.scan(options)) {
+                    List<String> batch = new ArrayList<>();
+                    while (cursor.hasNext()) {
+                        batch.add(cursor.next());
+                        if (batch.size() >= 100) {
+                            redisTemplate.delete(batch);
+                            batch.clear();
+                        }
+                    }
+                    if (!batch.isEmpty()) {
+                        redisTemplate.delete(batch);
+                    }
                 }
             } else {
                 Objects.requireNonNull(cacheManager.getCache("books")).clear();
@@ -114,9 +175,19 @@ public class BookService {
     private void evictBookByIdCache() {
         try {
             if (redisTemplate != null) {
-                Set<String> keys = redisTemplate.keys(BOOK_BY_ID_PREFIX + "*");
-                if (keys != null && !keys.isEmpty()) {
-                    redisTemplate.delete(keys);
+                ScanOptions options = ScanOptions.scanOptions().match(BOOK_BY_ID_PREFIX + "*").count(100).build();
+                try (Cursor<String> cursor = redisTemplate.scan(options)) {
+                    List<String> batch = new ArrayList<>();
+                    while (cursor.hasNext()) {
+                        batch.add(cursor.next());
+                        if (batch.size() >= 100) {
+                            redisTemplate.delete(batch);
+                            batch.clear();
+                        }
+                    }
+                    if (!batch.isEmpty()) {
+                        redisTemplate.delete(batch);
+                    }
                 }
             } else {
                 Objects.requireNonNull(cacheManager.getCache("bookById")).clear();

@@ -1,5 +1,6 @@
 package com.example.bookstore.chaos;
 
+import com.example.bookstore.base.AbstractIntegrationTest;
 import com.example.bookstore.config.SecurityUtils;
 import com.example.bookstore.model.*;
 import com.example.bookstore.repository.*;
@@ -9,21 +10,20 @@ import com.example.bookstore.service.payment.PaymentProviderResponse;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.Timeout;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 import java.math.BigDecimal;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.Mockito.when;
 
-@SpringBootTest
-@ActiveProfiles("test")
+@Timeout(value = 60, unit = TimeUnit.SECONDS)
 @DisplayName("Payment provider chaos tests — failure handling and idempotency")
-class PaymentProviderChaosTest {
+class PaymentProviderChaosTest extends AbstractIntegrationTest {
 
     @Autowired
     private PaymentService paymentService;
