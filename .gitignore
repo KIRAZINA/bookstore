@@ -83,3 +83,7 @@ k8s/*.local.yaml
 
 # Curator-managed audit register (local only, not tracked)
 AUDIT_REGISTER.md
+
+# Wave evidence artifacts — kept as local docs, never committed
+WAVE*_REPORT.md
+WAVE*_GROUND_TRUTH.md
