@@ -2,10 +2,10 @@ package com.example.bookstore.messaging.consumer;
 
 import com.example.bookstore.config.KafkaTopicConfig;
 import com.example.bookstore.event.EventTypes;
+import com.example.bookstore.event.publisher.OutboxEventPublisher;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
 import com.example.bookstore.messaging.metrics.MessagingMetrics;
-import com.example.bookstore.notification.email.EmailService;
 import com.example.bookstore.notification.template.EmailTemplateEngine;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
@@ -26,28 +26,18 @@ public class NotificationEventConsumer extends AbstractIdempotentConsumer {
     private static final Logger log = LoggerFactory.getLogger(NotificationEventConsumer.class);
 
     private final EmailTemplateEngine templateEngine;
-    private final EmailService emailService;
+    private final OutboxEventPublisher outboxEventPublisher;
 
     @Autowired
     public NotificationEventConsumer(ProcessedEventRepository processedEventRepository,
                                       MessagingMetrics messagingMetrics,
                                       EmailTemplateEngine templateEngine,
-                                      EmailService emailService,
+                                      OutboxEventPublisher outboxEventPublisher,
                                       PlatformTransactionManager transactionManager) {
         super(processedEventRepository, messagingMetrics,
                 KafkaTopicConfig.CONSUMER_GROUP_NOTIFICATIONS, transactionManager);
         this.templateEngine = templateEngine;
-        this.emailService = emailService;
-    }
-
-    /**
-     * Legacy constructor for unit tests that do not exercise transaction semantics.
-     */
-    NotificationEventConsumer(ProcessedEventRepository processedEventRepository,
-                              MessagingMetrics messagingMetrics,
-                              EmailTemplateEngine templateEngine,
-                              EmailService emailService) {
-        this(processedEventRepository, messagingMetrics, templateEngine, emailService, null);
+        this.outboxEventPublisher = outboxEventPublisher;
     }
 
     /**
@@ -88,9 +78,7 @@ public class NotificationEventConsumer extends AbstractIdempotentConsumer {
             "userName", data.get("userName"),
             "totalPrice", data.get("totalPrice"));
         String body = templateEngine.render("order-confirmation", templateData);
-        emailService.sendEmail(
-                stringOr(data.get("userEmail")),
-                "Order Confirmation #" + data.get("orderId"),
+        requestEmail(data, "Order Confirmation #" + data.get("orderId"),
                 body, "ORDER_CONFIRMATION");
     }
 
@@ -101,9 +89,7 @@ public class NotificationEventConsumer extends AbstractIdempotentConsumer {
             "previousStatus", data.get("previousStatus"),
             "newStatus", data.get("newStatus"));
         String body = templateEngine.render("order-status-changed", templateData);
-        emailService.sendEmail(
-                stringOr(data.get("userEmail")),
-                "Order Status Update #" + data.get("orderId"),
+        requestEmail(data, "Order Status Update #" + data.get("orderId"),
                 body, "ORDER_STATUS_CHANGED");
     }
 
@@ -114,9 +100,7 @@ public class NotificationEventConsumer extends AbstractIdempotentConsumer {
             "amount", data.get("amount"),
             "transactionId", data.get("transactionId"));
         String body = templateEngine.render("payment-success", templateData);
-        emailService.sendEmail(
-                stringOr(data.get("userEmail")),
-                "Payment Successful #" + data.get("orderId"),
+        requestEmail(data, "Payment Successful #" + data.get("orderId"),
                 body, "PAYMENT_SUCCESS");
     }
 
@@ -127,9 +111,7 @@ public class NotificationEventConsumer extends AbstractIdempotentConsumer {
             "amount", data.get("amount"),
             "failureReason", data.get("failureReason"));
         String body = templateEngine.render("payment-failed", templateData);
-        emailService.sendEmail(
-                stringOr(data.get("userEmail")),
-                "Payment Failed #" + data.get("orderId"),
+        requestEmail(data, "Payment Failed #" + data.get("orderId"),
                 body, "PAYMENT_FAILED");
     }
 
@@ -140,10 +122,25 @@ public class NotificationEventConsumer extends AbstractIdempotentConsumer {
             "amount", data.get("amount"),
             "transactionId", data.get("transactionId"));
         String body = templateEngine.render("refund-notification", templateData);
-        emailService.sendEmail(
-                stringOr(data.get("userEmail")),
-                "Refund Processed #" + data.get("orderId"),
+        requestEmail(data, "Refund Processed #" + data.get("orderId"),
                 body, "REFUND_NOTIFICATION");
+    }
+
+    /**
+     * Persists the email intent in the same transaction as the consumer dedup row instead
+     * of sending SMTP inline. If this transaction rolls back, the intent disappears with
+     * it and no email can be delivered; the scheduler delivers it only after commit.
+     */
+    private void requestEmail(Map<String, Object> data, String subject, String body,
+                              String emailType) {
+        String aggregateId = stringOr(data.get("orderId"));
+        outboxEventPublisher.publishEmailRequest(
+                stringOr(data.get("userEmail")),
+                subject,
+                body,
+                emailType,
+                aggregateId,
+                aggregateId);
     }
 
     private static String stringOr(Object value) {

@@ -2,6 +2,7 @@ package com.example.bookstore.event.publisher;
 
 import com.example.bookstore.event.BaseEvent;
 import com.example.bookstore.event.EventOutbox;
+import com.example.bookstore.event.EventTypes;
 import com.example.bookstore.event.repository.EventOutboxRepository;
 import com.example.bookstore.messaging.EnvelopeConverter;
 import io.opentelemetry.api.trace.Span;
@@ -11,6 +12,9 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
+
+import java.util.Map;
+import java.util.UUID;
 
 @Component
 public class OutboxEventPublisher implements DomainEventPublisher {
@@ -47,6 +51,44 @@ public class OutboxEventPublisher implements DomainEventPublisher {
 
         log.debug("Event published to outbox: type={}, aggregateId={}, eventId={}",
                 eventType, aggregateId, event.getEventId());
+    }
+
+    /**
+     * Persists an email request as an outbox row inside the caller's transaction. The
+     * email is delivered by {@code OutboxPublisherScheduler} after the transaction
+     * commits, so a rolled-back business transaction can never deliver the email and a
+     * crash between delivery and commit cannot lose the intent.
+     *
+     * <p>The outbox table already groups every durable intent; the free-text
+     * {@code event_type} discriminator distinguishes an email request from a Kafka
+     * event, so no schema change is required.</p>
+     */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public void publishEmailRequest(String to, String subject, String body, String emailType,
+                                    String aggregateId, String correlationId) {
+        String payload = EnvelopeConverter.serializePayload(Map.of(
+                "to", to == null ? "" : to,
+                "subject", subject == null ? "" : subject,
+                "body", body == null ? "" : body,
+                "emailType", emailType == null ? "" : emailType));
+
+        EventOutbox outbox = new EventOutbox(
+                UUID.randomUUID(),
+                EventTypes.AGGREGATE_NOTIFICATION,
+                aggregateId == null ? "unknown" : aggregateId,
+                EventTypes.NOTIFICATION_REQUESTED,
+                1,
+                correlationId,
+                extractTraceId(),
+                extractSpanId(),
+                "bookstore",
+                payload,
+                null);
+
+        outboxRepository.save(outbox);
+
+        log.debug("Email request published to outbox: recipient={}, aggregateId={}, correlationId={}",
+                to, aggregateId, correlationId);
     }
 
     private static String extractTraceId() {

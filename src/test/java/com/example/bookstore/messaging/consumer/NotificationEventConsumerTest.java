@@ -1,10 +1,10 @@
 package com.example.bookstore.messaging.consumer;
 
 import com.example.bookstore.event.ProcessedEvent;
+import com.example.bookstore.event.publisher.OutboxEventPublisher;
 import com.example.bookstore.event.repository.ProcessedEventRepository;
 import com.example.bookstore.messaging.DomainEventEnvelope;
 import com.example.bookstore.messaging.metrics.MessagingMetrics;
-import com.example.bookstore.notification.email.EmailService;
 import com.example.bookstore.notification.template.EmailTemplateEngine;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.junit.jupiter.api.BeforeEach;
@@ -33,14 +33,16 @@ class NotificationEventConsumerTest {
     @Mock
     private EmailTemplateEngine templateEngine;
     @Mock
-    private EmailService emailService;
+    private OutboxEventPublisher outboxEventPublisher;
 
     private NotificationEventConsumer consumer;
 
     @BeforeEach
     void setUp() {
+        // 4B.4 policy change: the consumer persists an email outbox intent instead of
+        // calling EmailService.sendEmail directly, so delivery happens after commit.
         consumer = new NotificationEventConsumer(processedEventRepository, messagingMetrics,
-                templateEngine, emailService);
+                templateEngine, outboxEventPublisher, null);
     }
 
     private DomainEventEnvelope envelope(String eventType, Map<String, Object> payload) {
@@ -60,7 +62,8 @@ class NotificationEventConsumerTest {
             consumer.doProcess(envelope("ORDER_CREATED", data));
 
             verify(templateEngine).render(eq("order-confirmation"), anyMap());
-            verify(emailService).sendEmail("a@b.com", "Order Confirmation #1", "<html>body</html>", "ORDER_CONFIRMATION");
+            verify(outboxEventPublisher).publishEmailRequest(
+                    "a@b.com", "Order Confirmation #1", "<html>body</html>", "ORDER_CONFIRMATION", "1", "1");
         }
 
         @Test
@@ -73,7 +76,8 @@ class NotificationEventConsumerTest {
             consumer.doProcess(envelope("ORDER_STATUS_CHANGED", data));
 
             verify(templateEngine).render(eq("order-status-changed"), anyMap());
-            verify(emailService).sendEmail("a@b.com", "Order Status Update #1", "<html>body</html>", "ORDER_STATUS_CHANGED");
+            verify(outboxEventPublisher).publishEmailRequest(
+                    "a@b.com", "Order Status Update #1", "<html>body</html>", "ORDER_STATUS_CHANGED", "1", "1");
         }
 
         @Test
@@ -86,7 +90,8 @@ class NotificationEventConsumerTest {
             consumer.doProcess(envelope("ORDER_CANCELLED", data));
 
             verify(templateEngine).render(eq("order-status-changed"), anyMap());
-            verify(emailService).sendEmail("a@b.com", "Order Status Update #1", "<html>body</html>", "ORDER_STATUS_CHANGED");
+            verify(outboxEventPublisher).publishEmailRequest(
+                    "a@b.com", "Order Status Update #1", "<html>body</html>", "ORDER_STATUS_CHANGED", "1", "1");
         }
 
         @Test
@@ -99,7 +104,8 @@ class NotificationEventConsumerTest {
             consumer.doProcess(envelope("PAYMENT_COMPLETED", data));
 
             verify(templateEngine).render(eq("payment-success"), anyMap());
-            verify(emailService).sendEmail("a@b.com", "Payment Successful #1", "<html>body</html>", "PAYMENT_SUCCESS");
+            verify(outboxEventPublisher).publishEmailRequest(
+                    "a@b.com", "Payment Successful #1", "<html>body</html>", "PAYMENT_SUCCESS", "1", "1");
         }
 
         @Test
@@ -112,7 +118,8 @@ class NotificationEventConsumerTest {
             consumer.doProcess(envelope("PAYMENT_FAILED", data));
 
             verify(templateEngine).render(eq("payment-failed"), anyMap());
-            verify(emailService).sendEmail("a@b.com", "Payment Failed #1", "<html>body</html>", "PAYMENT_FAILED");
+            verify(outboxEventPublisher).publishEmailRequest(
+                    "a@b.com", "Payment Failed #1", "<html>body</html>", "PAYMENT_FAILED", "1", "1");
         }
 
         @Test
@@ -125,7 +132,8 @@ class NotificationEventConsumerTest {
             consumer.doProcess(envelope("PAYMENT_REFUNDED", data));
 
             verify(templateEngine).render(eq("refund-notification"), anyMap());
-            verify(emailService).sendEmail("a@b.com", "Refund Processed #1", "<html>body</html>", "REFUND_NOTIFICATION");
+            verify(outboxEventPublisher).publishEmailRequest(
+                    "a@b.com", "Refund Processed #1", "<html>body</html>", "REFUND_NOTIFICATION", "1", "1");
         }
 
         @Test
@@ -135,7 +143,8 @@ class NotificationEventConsumerTest {
             consumer.doProcess(envelope("UNKNOWN_EVENT", data));
 
             verify(templateEngine, never()).render(anyString(), anyMap());
-            verify(emailService, never()).sendEmail(anyString(), anyString(), anyString(), anyString());
+            verify(outboxEventPublisher, never()).publishEmailRequest(
+                    anyString(), anyString(), anyString(), anyString(), anyString(), anyString());
         }
 
         @Test
@@ -149,7 +158,8 @@ class NotificationEventConsumerTest {
             when(templateEngine.render(anyString(), anyMap())).thenReturn("<html>body</html>");
             consumer.doProcess(envelope("ORDER_CREATED", data));
 
-            verify(emailService).sendEmail(eq(""), anyString(), anyString(), anyString());
+            verify(outboxEventPublisher).publishEmailRequest(
+                    eq(""), anyString(), anyString(), anyString(), eq("1"), eq("1"));
         }
     }
 
