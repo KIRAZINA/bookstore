@@ -159,12 +159,12 @@ class NotificationEventConsumerTest {
         @Test
         @DisplayName("Calls processEvent with correct JSON")
         void delegates() {
-            when(processedEventRepository.saveAndFlush(any(ProcessedEvent.class)))
+            when(processedEventRepository.save(any(ProcessedEvent.class)))
                     .thenReturn(mock(ProcessedEvent.class));
             consumer.onNotificationEvent(new ConsumerRecord<String, String>("orders.events", 0, 0L,
                     "1", validJson("NOTIFICATION_SEND")));
 
-            verify(processedEventRepository).saveAndFlush(any(ProcessedEvent.class));
+            verify(processedEventRepository).save(any(ProcessedEvent.class));
         }
 
         private String validJson(String eventType) {

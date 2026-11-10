@@ -56,10 +56,10 @@ class PaymentEventConsumerTest {
     @Test
     @DisplayName("onPaymentEvent delegates to processEvent")
     void onPaymentEvent() {
-        when(processedEventRepository.saveAndFlush(any())).thenReturn(mock(ProcessedEvent.class));
+        when(processedEventRepository.save(any())).thenReturn(mock(ProcessedEvent.class));
         consumer.onPaymentEvent(new ConsumerRecord<String, String>("payments.events", 0, 0L,
                 "1", validJson("PAYMENT_COMPLETED")));
-        verify(processedEventRepository).saveAndFlush(any());
+        verify(processedEventRepository).save(any());
     }
 
     @Test

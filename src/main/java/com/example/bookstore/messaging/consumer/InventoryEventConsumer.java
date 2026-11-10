@@ -8,9 +8,11 @@ import com.example.bookstore.service.AuditService;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
 
 @Component
 @ConditionalOnProperty("spring.kafka.bootstrap-servers")
@@ -20,11 +22,23 @@ public class InventoryEventConsumer extends AbstractIdempotentConsumer {
 
     private final AuditService auditService;
 
+    @Autowired
     public InventoryEventConsumer(ProcessedEventRepository processedEventRepository,
                                    MessagingMetrics messagingMetrics,
-                                   AuditService auditService) {
-        super(processedEventRepository, messagingMetrics, KafkaTopicConfig.CONSUMER_GROUP_INVENTORY);
+                                   AuditService auditService,
+                                   PlatformTransactionManager transactionManager) {
+        super(processedEventRepository, messagingMetrics,
+                KafkaTopicConfig.CONSUMER_GROUP_INVENTORY, transactionManager);
         this.auditService = auditService;
+    }
+
+    /**
+     * Legacy constructor for unit tests that do not exercise transaction semantics.
+     */
+    InventoryEventConsumer(ProcessedEventRepository processedEventRepository,
+                           MessagingMetrics messagingMetrics,
+                           AuditService auditService) {
+        this(processedEventRepository, messagingMetrics, auditService, null);
     }
 
     @KafkaListener(topics = KafkaTopicConfig.TOPIC_INVENTORY,

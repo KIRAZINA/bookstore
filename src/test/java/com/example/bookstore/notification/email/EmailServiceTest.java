@@ -31,64 +31,62 @@ class EmailServiceTest {
     @BeforeEach
     void setUp() {
         emailService = new EmailService(emailSender, emailLogRepository, businessMetrics);
-        when(emailLogRepository.save(any(EmailLog.class))).thenAnswer(i -> i.getArgument(0));
     }
 
     @Nested
     @DisplayName("sendEmail")
     class SendEmail {
         @Test
-        @DisplayName("Sends email successfully on first attempt")
+        @DisplayName("Sends email once and persists one SENT log entry")
         void success() {
             emailService.sendEmail("user@example.com", "Subject", "Body", "ORDER_CONFIRMATION");
 
             verify(emailSender).send("user@example.com", "Subject", "Body");
-            verify(emailLogRepository, times(2)).save(any(EmailLog.class));
-            verify(businessMetrics).recordEmailSent();
-        }
-
-        @Test
-        @DisplayName("Retries on failure and eventually succeeds")
-        void retryThenSuccess() {
-            doThrow(new RuntimeException("SMTP timeout"))
-                    .doThrow(new RuntimeException("SMTP timeout"))
-                    .doNothing()
-                    .when(emailSender).send(anyString(), anyString(), anyString());
-
-            emailService.sendEmail("user@example.com", "Subject", "Body", "ORDER_CONFIRMATION");
-
-            verify(emailSender, times(3)).send(anyString(), anyString(), anyString());
-            verify(businessMetrics).recordEmailSent();
-            verify(businessMetrics, never()).recordEmailFailed();
-        }
-
-        @Test
-        @DisplayName("Marks as FAILED after exhausting retries")
-        void allRetriesFailed() {
-            doThrow(new RuntimeException("SMTP down"))
-                    .when(emailSender).send(anyString(), anyString(), anyString());
-
-            emailService.sendEmail("user@example.com", "Subject", "Body", "ORDER_CONFIRMATION");
-
-            verify(emailSender, times(3)).send(anyString(), anyString(), anyString());
             ArgumentCaptor<EmailLog> captor = ArgumentCaptor.forClass(EmailLog.class);
-            verify(emailLogRepository, times(5)).save(captor.capture());
-            EmailLog saved = captor.getAllValues().get(4);
-            assertEquals(EmailStatus.FAILED, saved.getStatus());
-            verify(businessMetrics).recordEmailFailed();
+            verify(emailLogRepository).save(captor.capture());
+            assertEquals(EmailStatus.SENT, captor.getValue().getStatus());
+            verify(businessMetrics).recordEmailSent();
         }
 
         @Test
-        @DisplayName("Logs initial creation")
+        @DisplayName("Propagates SMTP failure instead of retrying inside EmailService")
+        void smtpFailurePropagates() {
+            doThrow(new RuntimeException("SMTP timeout"))
+                    .when(emailSender).send(anyString(), anyString(), anyString());
+
+            assertThrows(RuntimeException.class, () ->
+                    emailService.sendEmail("user@example.com", "Subject", "Body", "ORDER_CONFIRMATION"));
+
+            verify(emailSender, times(1)).send(anyString(), anyString(), anyString());
+            verify(emailLogRepository, never()).save(any(EmailLog.class));
+            verify(businessMetrics, never()).recordEmailSent();
+        }
+
+        @Test
+        @DisplayName("Does not resend or throw when the log save fails after delivery")
+        void logSaveFailureDoesNotResend() {
+            when(emailLogRepository.save(any(EmailLog.class)))
+                    .thenThrow(new IllegalStateException("database unavailable"));
+
+            assertDoesNotThrow(() ->
+                    emailService.sendEmail("user@example.com", "Subject", "Body", "ORDER_CONFIRMATION"));
+
+            verify(emailSender, times(1)).send(anyString(), anyString(), anyString());
+            verify(businessMetrics).recordEmailSent();
+        }
+
+        @Test
+        @DisplayName("Persists the recipient, subject, and email type")
         void createsLogEntry() {
             emailService.sendEmail("user@example.com", "Sub", "Body", "WELCOME");
 
             ArgumentCaptor<EmailLog> captor = ArgumentCaptor.forClass(EmailLog.class);
-            verify(emailLogRepository, atLeast(1)).save(captor.capture());
-            EmailLog initial = captor.getAllValues().get(0);
-            assertEquals("user@example.com", initial.getRecipient());
-            assertEquals("Sub", initial.getSubject());
-            assertEquals("WELCOME", initial.getEmailType());
+            verify(emailLogRepository).save(captor.capture());
+            EmailLog saved = captor.getValue();
+            assertEquals("user@example.com", saved.getRecipient());
+            assertEquals("Sub", saved.getSubject());
+            assertEquals("WELCOME", saved.getEmailType());
+            assertNotNull(saved.getSentAt());
         }
     }
 }

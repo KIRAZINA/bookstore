@@ -10,9 +10,11 @@ import com.example.bookstore.notification.template.EmailTemplateEngine;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
 
 import java.util.Map;
 
@@ -26,13 +28,26 @@ public class NotificationEventConsumer extends AbstractIdempotentConsumer {
     private final EmailTemplateEngine templateEngine;
     private final EmailService emailService;
 
+    @Autowired
     public NotificationEventConsumer(ProcessedEventRepository processedEventRepository,
                                       MessagingMetrics messagingMetrics,
                                       EmailTemplateEngine templateEngine,
-                                      EmailService emailService) {
-        super(processedEventRepository, messagingMetrics, KafkaTopicConfig.CONSUMER_GROUP_NOTIFICATIONS);
+                                      EmailService emailService,
+                                      PlatformTransactionManager transactionManager) {
+        super(processedEventRepository, messagingMetrics,
+                KafkaTopicConfig.CONSUMER_GROUP_NOTIFICATIONS, transactionManager);
         this.templateEngine = templateEngine;
         this.emailService = emailService;
+    }
+
+    /**
+     * Legacy constructor for unit tests that do not exercise transaction semantics.
+     */
+    NotificationEventConsumer(ProcessedEventRepository processedEventRepository,
+                              MessagingMetrics messagingMetrics,
+                              EmailTemplateEngine templateEngine,
+                              EmailService emailService) {
+        this(processedEventRepository, messagingMetrics, templateEngine, emailService, null);
     }
 
     /**

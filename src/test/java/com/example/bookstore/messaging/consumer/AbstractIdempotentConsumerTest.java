@@ -14,7 +14,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
@@ -29,6 +30,8 @@ class AbstractIdempotentConsumerTest {
     private ProcessedEventRepository processedEventRepository;
     @Mock
     private MessagingMetrics messagingMetrics;
+    @Mock
+    private PlatformTransactionManager transactionManager;
 
     private SpyConsumer consumer;
     private String validJson;
@@ -36,7 +39,8 @@ class AbstractIdempotentConsumerTest {
     @BeforeEach
     void setUp() {
         SpyConsumer.reset();
-        consumer = new SpyConsumer(processedEventRepository, messagingMetrics);
+        when(transactionManager.getTransaction(any())).thenReturn(new SimpleTransactionStatus());
+        consumer = new SpyConsumer(processedEventRepository, messagingMetrics, transactionManager);
         UUID eventId = UUID.randomUUID();
         validJson = """
                 {"eventId":"%s","aggregateType":"order","aggregateId":"1","eventType":"ORDER_CREATED","eventVersion":1,"timestamp":"2025-01-01T00:00:00Z","correlationId":"corr-1","producer":"bookstore","payload":{"orderId":1},"metadata":{}}
@@ -56,7 +60,7 @@ class AbstractIdempotentConsumerTest {
         @Test
         @DisplayName("Saves processed event and delegates to doProcess")
         void success() {
-            when(processedEventRepository.saveAndFlush(any(ProcessedEvent.class)))
+            when(processedEventRepository.save(any(ProcessedEvent.class)))
                     .thenReturn(mock(ProcessedEvent.class));
 
             consumer.processEvent(validJson, new RecordHeaders());
@@ -66,21 +70,22 @@ class AbstractIdempotentConsumerTest {
         }
 
         @Test
-        @DisplayName("Skips processing on duplicate event (DataIntegrityViolationException)")
+        @DisplayName("Skips processing when the dedup row already exists")
         void duplicateEvent() {
-            when(processedEventRepository.saveAndFlush(any(ProcessedEvent.class)))
-                    .thenThrow(new DataIntegrityViolationException("Duplicate key"));
+            when(processedEventRepository.existsByEventIdAndConsumerGroup(anyString(), eq("test-group")))
+                    .thenReturn(true);
 
             consumer.processEvent(validJson, new RecordHeaders());
 
             assertEquals(0, SpyConsumer.processedCount);
+            verify(processedEventRepository, never()).save(any(ProcessedEvent.class));
             verify(messagingMetrics, never()).recordEventConsumed();
         }
 
         @Test
         @DisplayName("Re-throws exception from doProcess and records failure")
         void doProcessFails() {
-            when(processedEventRepository.saveAndFlush(any(ProcessedEvent.class)))
+            when(processedEventRepository.save(any(ProcessedEvent.class)))
                     .thenReturn(mock(ProcessedEvent.class));
             consumer.throwOnProcess = true;
 
@@ -93,7 +98,7 @@ class AbstractIdempotentConsumerTest {
         @Test
         @DisplayName("Records processing duration in finally block")
         void recordsDuration() {
-            when(processedEventRepository.saveAndFlush(any(ProcessedEvent.class)))
+            when(processedEventRepository.save(any(ProcessedEvent.class)))
                     .thenReturn(mock(ProcessedEvent.class));
 
             consumer.processEvent(validJson, new RecordHeaders());
@@ -104,7 +109,7 @@ class AbstractIdempotentConsumerTest {
         @Test
         @DisplayName("Records duration even when processing fails")
         void recordsDurationOnFailure() {
-            when(processedEventRepository.saveAndFlush(any(ProcessedEvent.class)))
+            when(processedEventRepository.save(any(ProcessedEvent.class)))
                     .thenReturn(mock(ProcessedEvent.class));
             consumer.throwOnProcess = true;
 
@@ -117,7 +122,7 @@ class AbstractIdempotentConsumerTest {
         @Test
         @DisplayName("Continues trace from traceparent header when no span is current")
         void continuesTraceFromHeader() {
-            when(processedEventRepository.saveAndFlush(any(ProcessedEvent.class)))
+            when(processedEventRepository.save(any(ProcessedEvent.class)))
                     .thenReturn(mock(ProcessedEvent.class));
 
             consumer.processEvent(validJson, headersWithTraceParent());
@@ -128,8 +133,8 @@ class AbstractIdempotentConsumerTest {
         @Test
         @DisplayName("Does not override an already active local span")
         void doesNotOverrideActiveSpan() {
-            when(processedEventRepository.saveAndFlush(any(ProcessedEvent.class)))
-                    .thenReturn(mock(ProcessedEvent.class));
+            when(processedEventRepository.save(any(ProcessedEvent.class)))
+                    .thenReturn(new ProcessedEvent("event", "test-group"));
 
             io.opentelemetry.api.trace.Span localSpan = io.opentelemetry.api.trace.Span.wrap(
                     io.opentelemetry.api.trace.SpanContext.create(
@@ -150,8 +155,9 @@ class AbstractIdempotentConsumerTest {
         static String capturedTraceId = null;
         boolean throwOnProcess = false;
 
-        SpyConsumer(ProcessedEventRepository repo, MessagingMetrics metrics) {
-            super(repo, metrics, "test-group");
+        SpyConsumer(ProcessedEventRepository repo, MessagingMetrics metrics,
+                    PlatformTransactionManager transactionManager) {
+            super(repo, metrics, "test-group", transactionManager);
         }
 
         static void reset() {

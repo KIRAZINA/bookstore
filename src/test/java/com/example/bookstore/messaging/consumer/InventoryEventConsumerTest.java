@@ -56,10 +56,10 @@ class InventoryEventConsumerTest {
     @Test
     @DisplayName("onInventoryEvent delegates to processEvent")
     void onInventoryEvent() {
-        when(processedEventRepository.saveAndFlush(any())).thenReturn(mock(ProcessedEvent.class));
+        when(processedEventRepository.save(any())).thenReturn(mock(ProcessedEvent.class));
         consumer.onInventoryEvent(new ConsumerRecord<String, String>("inventory.events", 0, 0L,
                 "1", validJson("INVENTORY_RESERVED")));
-        verify(processedEventRepository).saveAndFlush(any());
+        verify(processedEventRepository).save(any());
     }
 
     @Test

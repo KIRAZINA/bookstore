@@ -14,8 +14,9 @@ import org.apache.kafka.common.header.Header;
 import org.apache.kafka.common.header.Headers;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionTemplate;
 
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -46,36 +47,71 @@ public abstract class AbstractIdempotentConsumer {
     protected final MessagingMetrics messagingMetrics;
     private final String consumerGroup;
 
+    /**
+     * TransactionTemplate is used instead of {@code @Transactional} because subclasses invoke
+     * {@link #processEvent(String, Headers)} directly through inheritance (self-invocation),
+     * which bypasses the Spring AOP proxy. A programmatic template is proxy-free by construction.
+     * Null only when a unit test constructs the consumer without a transaction manager.
+     */
+    private final TransactionTemplate dedupTemplate;
+
     protected AbstractIdempotentConsumer(ProcessedEventRepository processedEventRepository,
                                           MessagingMetrics messagingMetrics,
-                                          String consumerGroup) {
+                                          String consumerGroup,
+                                          PlatformTransactionManager transactionManager) {
         this.processedEventRepository = processedEventRepository;
         this.messagingMetrics = messagingMetrics;
         this.consumerGroup = consumerGroup;
+        this.dedupTemplate = transactionManager == null ? null : createDedupTemplate(transactionManager);
     }
 
-    @Transactional
+    /**
+     * Legacy constructor for tests that do not exercise transaction semantics.
+     */
+    protected AbstractIdempotentConsumer(ProcessedEventRepository processedEventRepository,
+                                          MessagingMetrics messagingMetrics,
+                                          String consumerGroup) {
+        this(processedEventRepository, messagingMetrics, consumerGroup, null);
+    }
+
+    private static TransactionTemplate createDedupTemplate(PlatformTransactionManager transactionManager) {
+        TransactionTemplate template = new TransactionTemplate(transactionManager);
+        template.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRED);
+        return template;
+    }
+
+    /**
+     * Processes one event atomically: the dedup row and the processing outcome are
+     * committed in the same transaction. If processing throws, the transaction rolls
+     * back and no dedup row remains, so a Kafka redelivery can retry the event.
+     */
     protected void processEvent(String message, Headers headers) {
         long start = System.currentTimeMillis();
         DomainEventEnvelope envelope = EnvelopeConverter.fromJson(message);
-
         String eventId = envelope.eventId().toString();
 
-        try {
-            processedEventRepository.saveAndFlush(new ProcessedEvent(eventId, consumerGroup));
-        } catch (DataIntegrityViolationException e) {
-            log.debug("Duplicate event skipped: type={}, eventId={}, consumer={}",
-                    envelope.eventType(), eventId, consumerGroup);
-            return;
-        }
+        Runnable processing = () -> {
+            if (processedEventRepository.existsByEventIdAndConsumerGroup(eventId, consumerGroup)) {
+                log.debug("Duplicate event skipped: type={}, eventId={}, consumer={}",
+                        envelope.eventType(), eventId, consumerGroup);
+                return;
+            }
 
-        try {
+            processedEventRepository.save(new ProcessedEvent(eventId, consumerGroup));
             runInTraceContext(headers, () -> {
                 doProcess(envelope);
                 messagingMetrics.recordEventConsumed();
                 log.debug("Processed event: type={}, eventId={}, consumer={}",
                         envelope.eventType(), eventId, consumerGroup);
             });
+        };
+
+        try {
+            if (dedupTemplate == null) {
+                processing.run();
+            } else {
+                dedupTemplate.executeWithoutResult(status -> processing.run());
+            }
         } catch (Exception e) {
             messagingMetrics.recordEventFailed();
             log.error("Failed to process event: type={}, eventId={}, consumer={}",
