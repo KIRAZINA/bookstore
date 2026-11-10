@@ -17,6 +17,9 @@ import jakarta.persistence.EntityNotFoundException;
 import jakarta.persistence.LockTimeoutException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.cache.Cache;
+import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.dao.CannotAcquireLockException;
@@ -25,6 +28,7 @@ import org.springframework.dao.PessimisticLockingFailureException;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Retryable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
@@ -41,6 +45,9 @@ public class InventoryService {
     private final InventoryValidator validator;
     private final BusinessMetrics businessMetrics;
     private final DomainEventPublisher domainEventPublisher;
+
+    @Autowired(required = false)
+    private CacheManager cacheManager;
 
     public InventoryService(InventoryRepository inventoryRepository,
                             InventoryHistoryRepository historyRepository,
@@ -203,12 +210,13 @@ public class InventoryService {
         return saved;
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRED)
     @Retryable(
         retryFor = OptimisticLockingFailureException.class,
         maxAttempts = 3,
         backoff = @Backoff(delay = 100, multiplier = 2)
     )
+    @CacheEvict(cacheNames = {"inventory", "inventoryAvailable"}, key = "#bookId")
     protected Inventory initializeInventory(Long bookId, int initialQuantity) {
         if (inventoryRepository.existsByBookId(bookId)) {
             throw new IllegalStateException("Inventory already exists for book: " + bookId);
@@ -222,7 +230,36 @@ public class InventoryService {
                 initialQuantity, null, null, "system", "Initial inventory creation");
 
         log.info("Created inventory for book {} with {} units", bookId, initialQuantity);
+        evictInventoryCacheEntries(bookId);
         return saved;
+    }
+
+    private void evictInventoryCaches() {
+        if (cacheManager == null) {
+            return;
+        }
+        Cache inventoryCache = cacheManager.getCache("inventory");
+        if (inventoryCache != null) {
+            inventoryCache.clear();
+        }
+        Cache availabilityCache = cacheManager.getCache("inventoryAvailable");
+        if (availabilityCache != null) {
+            availabilityCache.clear();
+        }
+    }
+
+    private void evictInventoryCacheEntries(Long bookId) {
+        if (cacheManager == null) {
+            return;
+        }
+        Cache inventoryCache = cacheManager.getCache("inventory");
+        if (inventoryCache != null) {
+            inventoryCache.evict(bookId);
+        }
+        Cache availabilityCache = cacheManager.getCache("inventoryAvailable");
+        if (availabilityCache != null) {
+            availabilityCache.evict(bookId);
+        }
     }
 
     public List<Inventory> findLowStock(int threshold) {
@@ -241,37 +278,125 @@ public class InventoryService {
         return historyRepository.findByOrderIdOrderByCreatedAtDesc(orderId);
     }
 
+    @Transactional(propagation = Propagation.REQUIRED)
+    @Retryable(
+        retryFor = OptimisticLockingFailureException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 100, multiplier = 2)
+    )
+    @CacheEvict(cacheNames = {"inventory", "inventoryAvailable"}, allEntries = true)
     public void releaseAllReservationsForOrder(Map<Long, Integer> orderItems, Long orderId, String reason, String changedBy) {
         for (Map.Entry<Long, Integer> entry : orderItems.entrySet()) {
-            releaseReservation(entry.getKey(), entry.getValue(), orderId, reason, changedBy);
+            Long bookId = entry.getKey();
+            int quantity = entry.getValue();
+            if (orderId != null && historyRepository.existsByBookIdAndOrderIdAndEventType(
+                    bookId, orderId, InventoryEventType.RELEASED)) {
+                log.warn("Reservation for book {} already released for order {}; skipping duplicate release",
+                        bookId, orderId);
+                continue;
+            }
+
+            Inventory inventory = getInventoryOrThrow(bookId);
+            validator.validateRelease(inventory, quantity);
+
+            int previousAvailable = inventory.getAvailableQuantity();
+            int previousReserved = inventory.getReservedQuantity();
+            inventory.release(quantity);
+            Inventory saved = inventoryRepository.save(inventory);
+
+            recordHistory(saved.getId(), bookId, InventoryEventType.RELEASED,
+                    previousAvailable, saved.getAvailableQuantity(),
+                    previousReserved, saved.getReservedQuantity(),
+                    quantity, orderId, null, changedBy, reason);
+
+            businessMetrics.recordInventoryRelease();
+            log.info("Released {} units of book {} for order {}: {}", quantity, bookId, orderId, reason);
         }
         domainEventPublisher.publish(
                 new InventoryReleasedEvent(orderId, orderItems, reason),
                 EventTypes.AGGREGATE_INVENTORY, String.valueOf(orderId), EventTypes.INVENTORY_RELEASED);
+        evictInventoryCaches();
     }
 
+    @Transactional(propagation = Propagation.REQUIRED)
+    @Retryable(
+        retryFor = OptimisticLockingFailureException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 100, multiplier = 2)
+    )
+    @CacheEvict(cacheNames = {"inventory", "inventoryAvailable"}, allEntries = true)
     public void finalizeAllReservationsForOrder(Map<Long, Integer> orderItems, Long orderId) {
         for (Map.Entry<Long, Integer> entry : orderItems.entrySet()) {
-            finalizeReservation(entry.getKey(), entry.getValue(), orderId);
+            Long bookId = entry.getKey();
+            int quantity = entry.getValue();
+            Inventory inventory = getInventoryOrThrow(bookId);
+            validator.validateFinalization(inventory, quantity);
+
+            int previousAvailable = inventory.getAvailableQuantity();
+            int previousReserved = inventory.getReservedQuantity();
+            inventory.finalizeReservation(quantity);
+            Inventory saved = inventoryRepository.save(inventory);
+
+            recordHistory(saved.getId(), bookId, InventoryEventType.FINALIZED,
+                    previousAvailable, saved.getAvailableQuantity(),
+                    previousReserved, saved.getReservedQuantity(),
+                    quantity, orderId, null, "system", "Payment completed");
+
+            businessMetrics.recordInventoryFinalization();
+            businessMetrics.recordBooksSold(quantity);
+            log.info("Finalized {} units of book {} for order {}", quantity, bookId, orderId);
         }
         domainEventPublisher.publish(
                 new InventoryFinalizedEvent(orderId, orderItems),
                 EventTypes.AGGREGATE_INVENTORY, String.valueOf(orderId), EventTypes.INVENTORY_FINALIZED);
+        evictInventoryCaches();
     }
 
+    @Transactional(propagation = Propagation.REQUIRED)
+    @Retryable(
+        retryFor = OptimisticLockingFailureException.class,
+        maxAttempts = 3,
+        backoff = @Backoff(delay = 100, multiplier = 2)
+    )
+    @CacheEvict(cacheNames = {"inventory", "inventoryAvailable"}, allEntries = true)
     public void restoreAllStockForOrder(Map<Long, Integer> orderItems, Long orderId, String reason, String changedBy) {
         for (Map.Entry<Long, Integer> entry : orderItems.entrySet()) {
-            restoreStock(entry.getKey(), entry.getValue(), orderId, reason, changedBy);
+            Long bookId = entry.getKey();
+            int quantity = entry.getValue();
+            if (orderId != null && historyRepository.existsByBookIdAndOrderIdAndEventType(
+                    bookId, orderId, InventoryEventType.RESTORED)) {
+                log.warn("Stock for book {} already restored for order {}; skipping duplicate restore", bookId, orderId);
+                continue;
+            }
+
+            Inventory inventory = getInventoryOrThrow(bookId);
+
+            int previousAvailable = inventory.getAvailableQuantity();
+            int previousReserved = inventory.getReservedQuantity();
+            inventory.restore(quantity);
+            Inventory saved = inventoryRepository.save(inventory);
+
+            recordHistory(saved.getId(), bookId, InventoryEventType.RESTORED,
+                    previousAvailable, saved.getAvailableQuantity(),
+                    previousReserved, saved.getReservedQuantity(),
+                    quantity, orderId, null, changedBy, reason);
+
+            businessMetrics.recordInventoryRestore();
+            log.info("Restored {} units of book {} for order {}: {}", quantity, bookId, orderId, reason);
         }
+        evictInventoryCaches();
     }
 
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRED)
     @Retryable(
         retryFor = { CannotAcquireLockException.class, PessimisticLockingFailureException.class,
                      LockTimeoutException.class, OptimisticLockingFailureException.class },
         maxAttempts = 3,
         backoff = @Backoff(delay = 100, multiplier = 2)
     )
+    // Batch reservation: the transaction and cache eviction are placed on this
+    // proxy-visible method so they cannot be bypassed by self-invocation.
+    @CacheEvict(cacheNames = {"inventory", "inventoryAvailable"}, allEntries = true)
     public void reserveAll(Long orderId, Map<Long, Integer> bookQuantities, String changedBy) {
         List<Map.Entry<Long, Integer>> sorted = bookQuantities.entrySet().stream()
                 .sorted(Map.Entry.comparingByKey())
@@ -294,6 +419,7 @@ public class InventoryService {
         domainEventPublisher.publish(
                 new InventoryReservedEvent(orderId, Map.copyOf(bookQuantities)),
                 EventTypes.AGGREGATE_INVENTORY, String.valueOf(orderId), EventTypes.INVENTORY_RESERVED);
+        evictInventoryCaches();
     }
 
     private void recordHistory(Long inventoryId, Long bookId, InventoryEventType eventType,
