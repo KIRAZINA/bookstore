@@ -4,8 +4,6 @@ import com.example.bookstore.controller.dto.BookRequest;
 import com.example.bookstore.controller.dto.BookResponse;
 import com.example.bookstore.controller.dto.UpdateStockRequest;
 import com.example.bookstore.model.Book;
-import com.example.bookstore.model.Inventory;
-import com.example.bookstore.repository.InventoryRepository;
 import com.example.bookstore.service.BookService;
 import com.example.bookstore.service.InventoryService;
 import com.example.bookstore.service.InventoryValidator;
@@ -22,10 +20,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
-import java.util.stream.Collectors;
 
 @RestController
 @RequestMapping("/api/v1/books")
@@ -33,16 +28,13 @@ public class BookController {
     private final BookService bookService;
     private final InventoryService inventoryService;
     private final InventoryValidator inventoryValidator;
-    private final InventoryRepository inventoryRepository;
 
     public BookController(BookService bookService,
                           InventoryService inventoryService,
-                          InventoryValidator inventoryValidator,
-                          InventoryRepository inventoryRepository) {
+                          InventoryValidator inventoryValidator) {
         this.bookService = bookService;
         this.inventoryService = inventoryService;
         this.inventoryValidator = inventoryValidator;
-        this.inventoryRepository = inventoryRepository;
     }
 
     @GetMapping
@@ -158,26 +150,8 @@ public class BookController {
         if (books == null || books.isEmpty()) {
             return List.of();
         }
-        List<Long> ids = books.stream().map(Book::getId).toList();
-        Map<Long, Integer> availMap = new HashMap<>();
-        if (!ids.isEmpty()) {
-            for (Inventory inv : inventoryRepository.findByBookIdIn(ids)) {
-                availMap.put(inv.getBookId(), inv.getAvailableQuantity());
-            }
-        }
-        return books.stream().map(b -> {
-            int avail = availMap.getOrDefault(b.getId(), 0);
-            String status = inventoryValidator.determineStatus(avail).name();
-            return new BookResponse(
-                    b.getId(),
-                    b.getTitle(),
-                    b.getAuthor(),
-                    b.getPrice(),
-                    b.getCategory(),
-                    avail,
-                    avail,
-                    status
-            );
-        }).collect(Collectors.toList());
+        // Use the same service-backed availability path as the single-book
+        // response so both endpoints always agree field-for-field.
+        return books.stream().map(this::toBookResponse).toList();
     }
 }

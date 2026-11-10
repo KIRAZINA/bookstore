@@ -22,6 +22,7 @@ import org.springframework.cache.Cache;
 import org.springframework.cache.CacheManager;
 import org.springframework.cache.annotation.CacheEvict;
 import org.springframework.cache.annotation.Cacheable;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -48,6 +49,15 @@ public class InventoryService {
 
     @Autowired(required = false)
     private CacheManager cacheManager;
+
+    /**
+     * Self-reference resolved through the Spring proxy. A direct call to
+     * {@link #getAvailableQuantity(Long)} would bypass the {@code @Cacheable}
+     * advice because it would not pass through the proxy.
+     */
+    @Autowired
+    @Lazy
+    private InventoryService self;
 
     public InventoryService(InventoryRepository inventoryRepository,
                             InventoryHistoryRepository historyRepository,
@@ -85,7 +95,10 @@ public class InventoryService {
     }
 
     public InventoryStatus getInventoryStatus(Long bookId) {
-        int available = getAvailableQuantity(bookId);
+        // Route through the proxy so the shared inventoryAvailable cache is used
+        // instead of a self-invocation that bypasses the cache advice.
+        InventoryService target = self != null ? self : this;
+        int available = target.getAvailableQuantity(bookId);
         return validator.determineStatus(available);
     }
 
