@@ -43,6 +43,9 @@ class OutboxPublisherSchedulerTest {
         lenient().when(successResult.getRecordMetadata())
                 .thenReturn(mock(org.apache.kafka.clients.producer.RecordMetadata.class));
         scheduler = new OutboxPublisherScheduler(outboxRepository, kafkaTemplate, 5);
+        // Fenced marks report rows updated; 1 means the claim token still matched.
+        lenient().when(outboxRepository.markPublished(any(), any(), any())).thenReturn(1);
+        lenient().when(outboxRepository.markFailedFenced(any(), any(), anyInt(), any())).thenReturn(1);
     }
 
     private EventOutbox anOutbox(String eventType) {
@@ -65,7 +68,7 @@ class OutboxPublisherSchedulerTest {
         @Test
         @DisplayName("Does nothing when no pending events")
         void noPendingEvents() {
-            when(outboxRepository.findPendingEvents(5)).thenReturn(List.of());
+            when(outboxRepository.claimBatch(anyInt(), eq(5), any())).thenReturn(List.of());
 
             scheduler.publishPendingEvents();
 
@@ -73,10 +76,10 @@ class OutboxPublisherSchedulerTest {
         }
 
         @Test
-        @DisplayName("Publishes pending events and marks as published")
+        @DisplayName("Publishes claimed events and marks as published with the claim token")
         void publishesSuccessfully() {
             EventOutbox outbox = anOutbox("ORDER_CREATED");
-            when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox));
+            when(outboxRepository.claimBatch(anyInt(), eq(5), any())).thenReturn(List.of(outbox));
             when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(successFuture());
 
             scheduler.publishPendingEvents();
@@ -87,14 +90,14 @@ class OutboxPublisherSchedulerTest {
             assertEquals("orders.events", record.topic());
             assertEquals("1", record.key());
             assertNotNull(record.value());
-            verify(outboxRepository).markPublished(eq(outbox.getId()), any(Instant.class));
+            verify(outboxRepository).markPublished(eq(outbox.getId()), any(), any(Instant.class));
         }
 
         @Test
         @DisplayName("Adds W3C traceparent header when trace context is available")
         void addsTraceParentHeader() {
             EventOutbox outbox = anOutbox("ORDER_CREATED", "0123456789abcdef0123456789abcdef", "0123456789abcdef");
-            when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox));
+            when(outboxRepository.claimBatch(anyInt(), eq(5), any())).thenReturn(List.of(outbox));
             when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(successFuture());
 
             scheduler.publishPendingEvents();
@@ -111,7 +114,7 @@ class OutboxPublisherSchedulerTest {
         @DisplayName("Skips traceparent header when trace context is incomplete")
         void skipsTraceParentWhenMissing() {
             EventOutbox outbox = anOutbox("ORDER_CREATED", "trace-only", null);
-            when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox));
+            when(outboxRepository.claimBatch(anyInt(), eq(5), any())).thenReturn(List.of(outbox));
             when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(successFuture());
 
             scheduler.publishPendingEvents();
@@ -122,10 +125,10 @@ class OutboxPublisherSchedulerTest {
         }
 
         @Test
-        @DisplayName("Increments retry on transient failure")
+        @DisplayName("Increments retry on transient failure via a fenced failure mark")
         void retriesOnFailure() {
             EventOutbox outbox = anOutbox("ORDER_CREATED");
-            when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox));
+            when(outboxRepository.claimBatch(anyInt(), eq(5), any())).thenReturn(List.of(outbox));
 
             CompletableFuture<SendResult<String, String>> failedFuture = new CompletableFuture<>();
             failedFuture.completeExceptionally(new ExecutionException(new RuntimeException("Kafka unavailable")));
@@ -133,11 +136,11 @@ class OutboxPublisherSchedulerTest {
 
             scheduler.publishPendingEvents();
 
-            verify(outboxRepository).incrementRetry(outbox.getId());
+            verify(outboxRepository).markFailedFenced(eq(outbox.getId()), any(), eq(5), any(Instant.class));
         }
 
         @Test
-        @DisplayName("Marks as failed after max retries exceeded")
+        @DisplayName("Marks as failed after max retries exceeded via a fenced failure mark")
         void marksFailed() {
             EventOutbox outbox = anOutbox("ORDER_CREATED");
             outbox.incrementRetry();
@@ -145,7 +148,7 @@ class OutboxPublisherSchedulerTest {
             outbox.incrementRetry();
             outbox.incrementRetry();
             assertEquals(4, outbox.getRetryCount());
-            when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox));
+            when(outboxRepository.claimBatch(anyInt(), eq(5), any())).thenReturn(List.of(outbox));
 
             CompletableFuture<SendResult<String, String>> failedFuture = new CompletableFuture<>();
             failedFuture.completeExceptionally(new ExecutionException(new RuntimeException("Kafka unavailable")));
@@ -153,7 +156,7 @@ class OutboxPublisherSchedulerTest {
 
             scheduler.publishPendingEvents();
 
-            verify(outboxRepository).markFailed(eq(outbox.getId()), any(Instant.class));
+            verify(outboxRepository).markFailedFenced(eq(outbox.getId()), any(), eq(5), any(Instant.class));
         }
 
         @Test
@@ -164,7 +167,7 @@ class OutboxPublisherSchedulerTest {
             EventOutbox inventoryOutbox = anOutbox("INVENTORY_RESERVED");
             EventOutbox notificationOutbox = anOutbox("NOTIFICATION_SEND");
 
-            when(outboxRepository.findPendingEvents(5)).thenReturn(
+            when(outboxRepository.claimBatch(anyInt(), eq(5), any())).thenReturn(
                     List.of(orderOutbox, paymentOutbox, inventoryOutbox, notificationOutbox));
             when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(successFuture());
 
@@ -181,7 +184,8 @@ class OutboxPublisherSchedulerTest {
         @DisplayName("Handles InterruptedException by breaking")
         void interrupted() {
             EventOutbox outbox = anOutbox("ORDER_CREATED");
-            when(outboxRepository.findPendingEvents(5)).thenReturn(List.of(outbox, anOutbox("ORDER_CREATED")));
+            when(outboxRepository.claimBatch(anyInt(), eq(5), any())).thenReturn(
+                    List.of(outbox, anOutbox("ORDER_CREATED")));
 
             CompletableFuture<SendResult<String, String>> interruptedFuture = new CompletableFuture<>();
             interruptedFuture.completeExceptionally(new InterruptedException("Interrupted"));
@@ -189,7 +193,7 @@ class OutboxPublisherSchedulerTest {
 
             scheduler.publishPendingEvents();
 
-            verify(outboxRepository, never()).markPublished(any(), any());
+            verify(outboxRepository, never()).markPublished(any(), any(), any());
         }
     }
 }

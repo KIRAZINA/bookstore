@@ -5,6 +5,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
 import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
+import jakarta.persistence.PrePersist;
+import jakarta.persistence.PreUpdate;
 import jakarta.persistence.Table;
 import org.hibernate.annotations.JdbcTypeCode;
 import org.hibernate.type.SqlTypes;
@@ -63,6 +65,14 @@ public class EventOutbox {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    /** Last transition timestamp; compared by the stale-claim reaper. */
+    @Column(name = "updated_at", nullable = false)
+    private Instant updatedAt;
+
+    /** Fencing token set at claim time and required by every Phase-3 mark. */
+    @Column(name = "claim_token")
+    private UUID claimToken;
+
     /** No-arg constructor required by JPA. */
     protected EventOutbox() {}
 
@@ -82,6 +92,14 @@ public EventOutbox(UUID id, String aggregateType, String aggregateId, String eve
         this.metadata = metadata;
         this.status = OutboxStatus.PENDING;
         this.createdAt = Instant.now();
+        this.updatedAt = Instant.now();
+    }
+
+    /** Keeps updatedAt in sync on every ORM-managed save; bulk JPQL/native writes set it explicitly. */
+    @PrePersist
+    @PreUpdate
+    void touchUpdatedAt() {
+        this.updatedAt = Instant.now();
     }
 
     public UUID getId() { return id; }
@@ -99,6 +117,8 @@ public EventOutbox(UUID id, String aggregateType, String aggregateId, String eve
     public int getRetryCount() { return retryCount; }
     public Instant getCreatedAt() { return createdAt; }
     public Instant getPublishedAt() { return publishedAt; }
+    public Instant getUpdatedAt() { return updatedAt; }
+    public UUID getClaimToken() { return claimToken; }
 
     public void markPublished() {
         this.status = OutboxStatus.PUBLISHED;

@@ -21,6 +21,11 @@ public final class EventTypes {
     public static final String INVENTORY_FINALIZED = "INVENTORY_FINALIZED";
     public static final String INVENTORY_ADJUSTED = "INVENTORY_ADJUSTED";
 
+    /**
+     * Reserved for email intents only: this is the single event type that drives the
+     * outbox scheduler's SMTP branch. Do not reuse it for other notification types —
+     * those must travel through Kafka instead.
+     */
     public static final String NOTIFICATION_REQUESTED = "NOTIFICATION_REQUESTED";
     public static final String NOTIFICATION_SENT = "NOTIFICATION_SENT";
     public static final String NOTIFICATION_FAILED = "NOTIFICATION_FAILED";
