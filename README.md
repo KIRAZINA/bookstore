@@ -89,7 +89,6 @@ All other settings have sensible defaults in `application.yml` / `application-de
 
 ## More documentation
 
-- [Project architecture](PROJECT_ARCHITECTURE.md) — design, domain model, deployment
 - [Changelog](CHANGELOG.md) — what changed and why
 
 ## License

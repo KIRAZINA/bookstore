@@ -12,13 +12,9 @@ public interface InventoryHistoryRepository extends JpaRepository<InventoryHisto
 
     List<InventoryHistory> findByBookIdOrderByCreatedAtDesc(Long bookId);
 
-    List<InventoryHistory> findByInventoryIdOrderByCreatedAtDesc(Long inventoryId);
-
     List<InventoryHistory> findByOrderIdOrderByCreatedAtDesc(Long orderId);
 
     Page<InventoryHistory> findByBookId(Long bookId, Pageable pageable);
-
-    List<InventoryHistory> findByEventType(InventoryEventType eventType);
 
     List<InventoryHistory> findByOrderIdAndEventType(Long orderId, InventoryEventType eventType);
 

@@ -135,8 +135,9 @@ class NotificationEventIntegrationTest extends AbstractIntegrationTest {
     void orderStatusChange_TriggersEmailLog() {
         cartService.addToCart(book.getId(), 1);
         Order order = orderService.createOrder();
+        paymentService.processPayment(order.getId(), "CREDIT_CARD");
 
-        orderService.updateOrderStatus(order.getId(), OrderStatus.PAID, "Test payment");
+        orderService.updateOrderStatus(order.getId(), OrderStatus.PROCESSING, "Test processing");
 
         Awaitility.await()
                 .atMost(5, TimeUnit.SECONDS)

@@ -34,7 +34,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 /**
- * Wave 4D / D-REFUND-1: refund record integrity.
+ * Refund record integrity.
  *
  * <p>The refund path used to overwrite {@code payment.transaction_id} with the refund's
  * provider transaction id, destroying the original payment identifier. It also never

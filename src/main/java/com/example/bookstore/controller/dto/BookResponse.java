@@ -16,17 +16,6 @@ public class BookResponse {
     public BookResponse() {}
 
     public BookResponse(Long id, String title, String author, BigDecimal price,
-                        String category, Integer stock) {
-        this.id = id;
-        this.title = title;
-        this.author = author;
-        this.price = price;
-        this.category = category;
-        this.stock = stock;
-        this.availableQuantity = stock;
-    }
-
-    public BookResponse(Long id, String title, String author, BigDecimal price,
                         String category, Integer stock,
                         Integer availableQuantity, String inventoryStatus) {
         this.id = id;

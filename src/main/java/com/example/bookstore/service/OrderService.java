@@ -285,11 +285,7 @@ public class OrderService {
         order.recordTransition(OrderStatus.CANCELLED, admin.getUsername(), comment);
         orderRepository.save(order);
 
-        if (previousStatus == OrderStatus.PAID) {
-            restoreInventoryForOrder(order, "Admin cancelled: " + comment, admin.getUsername());
-        } else {
-            releaseInventoryForOrder(order, "Admin cancelled: " + comment, admin.getUsername());
-        }
+        releaseInventoryForOrder(order, "Admin cancelled: " + comment, admin.getUsername());
 
         businessMetrics.recordOrderCancelled();
 
@@ -305,14 +301,6 @@ public class OrderService {
             items.put(item.getBook().getId(), item.getQuantity());
         }
         inventoryService.releaseAllReservationsForOrder(items, order.getId(), reason, changedBy);
-    }
-
-    private void restoreInventoryForOrder(Order order, String reason, String changedBy) {
-        Map<Long, Integer> items = new LinkedHashMap<>();
-        for (OrderItem item : order.getItems()) {
-            items.put(item.getBook().getId(), item.getQuantity());
-        }
-        inventoryService.restoreAllStockForOrder(items, order.getId(), reason, changedBy);
     }
 
     public java.util.List<OrderStatusHistory> getOrderHistory(Long orderId) {

@@ -49,6 +49,9 @@ class OrderServiceTest {
     private PaymentRepository paymentRepository;
 
     @Mock
+    private PaymentService paymentService;
+
+    @Mock
     private DummyPaymentProvider paymentProvider;
 
     @Mock
@@ -233,6 +236,8 @@ class OrderServiceTest {
             order.setUser(testUser);
             order.setStatus(OrderStatus.PENDING);
 
+            Payment payment = new Payment(order, "DUMMY", PaymentStatus.COMPLETED, new BigDecimal("100.00"));
+            order.setPayment(payment);
             when(securityUtils.getCurrentUser()).thenReturn(adminUser);
             when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
 
@@ -269,13 +274,18 @@ class OrderServiceTest {
             order.setUser(testUser);
             order.setStatus(OrderStatus.PAID);
 
+            Payment payment = new Payment(order, "DUMMY", PaymentStatus.COMPLETED, new BigDecimal("100.00"));
+            payment.setId(1L);
+            order.setPayment(payment);
             when(securityUtils.getCurrentUser()).thenReturn(adminUser);
             when(orderRepository.findById(1L)).thenReturn(Optional.of(order));
+            when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.of(payment));
 
             orderService.adminCancelOrder(1L, "Admin override");
 
-            assertEquals(OrderStatus.CANCELLED, order.getStatus());
-            verify(orderRepository).save(order);
+            // A PAID order is cancelled by refunding the completed payment; the
+            // refund path owns the order state transition in its own transaction.
+            verify(paymentService).refundPayment(anyLong(), anyString(), anyString());
         }
 
         @Test

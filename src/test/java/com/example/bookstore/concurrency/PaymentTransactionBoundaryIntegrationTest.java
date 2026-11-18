@@ -157,14 +157,12 @@ class PaymentTransactionBoundaryIntegrationTest extends AbstractIntegrationTest 
      * active database transaction. The primary gate is isActualTransactionActive();
      * the synchronization flag is reported only as diagnostic context.
      */
-    // Observed 2026-11-18 (Wave 5B): the provider call has
-    // isActualTransactionActive=false (correct — the 4A.1 NOT_SUPPORTED boundary
-    // works) but isSynchronizationActive=true. The synchronization was registered
-    // but no transaction is active to fire it.
-    //
-    // Whether this is a Spring version-specific NOT_SUPPORTED artifact, or a
-    // thread-local leak from a prior test in the same class, is unverified.
-    // See RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE.
+    // The provider call has isActualTransactionActive=false (the NOT_SUPPORTED
+    // boundary works) but isSynchronizationActive=true. In Spring 7.0.8 this is
+    // expected: NOT_SUPPORTED clears the caller's synchronizations, then installs
+    // a fresh empty synchronization scope, and isSynchronizationActive() only
+    // checks that the scope exists. No synchronizations are registered there.
+    // The isActualTransactionActive=false assertion remains the correctness gate.
     //
     // The isActualTransactionActive=false assertion (T8/T9/T10/T11) remains the
     // correctness invariant for the provider transaction boundary. The

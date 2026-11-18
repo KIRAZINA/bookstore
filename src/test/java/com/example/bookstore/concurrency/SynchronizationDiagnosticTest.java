@@ -41,7 +41,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.mockito.Mockito.when;
 
 // Purpose: characterize isSynchronizationActive behavior at the provider
-// boundary. Diagnostic only, not a correctness gate. See RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE.
+// boundary. Diagnostic only, not a correctness gate.
 @Import(SynchronizationDiagnosticTest.DiagnosticProviderConfig.class)
 class SynchronizationDiagnosticTest extends AbstractIntegrationTest {
 

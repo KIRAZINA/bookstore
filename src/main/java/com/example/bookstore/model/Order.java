@@ -102,7 +102,4 @@ public class Order {
         this.payment = payment;
     }
 
-    public boolean isCancelable() {
-        return status.isCancelable();
-    }
 }

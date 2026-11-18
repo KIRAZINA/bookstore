@@ -324,7 +324,7 @@ public class PaymentService {
         }
         Order order = orderRepository.findById(orderId)
                 .orElseThrow(() -> new PaymentException("Order not found: " + orderId));
-        if (order == null || order.getStatus() != OrderStatus.PAID) {
+        if (order.getStatus() != OrderStatus.PAID) {
             throw new InvalidPaymentStateException(
                     "Payment cannot be refunded in the current order state");
         }
@@ -349,7 +349,7 @@ public class PaymentService {
         AppUser user = order.getUser();
 
         if (providerResponse.isSuccess()) {
-            // D-REFUND-1: transaction_id is the ORIGINAL payment transaction id and must
+            // transaction_id is the ORIGINAL payment transaction id and must
             // survive the refund. The provider's refund id is recorded separately so the
             // payment can still be reconciled against the provider ledger.
             reloaded.setRefundedAmount(reloaded.getAmount());

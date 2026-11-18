@@ -21,6 +21,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/books")
@@ -132,7 +133,10 @@ public class BookController {
     }
 
     private BookResponse toBookResponse(Book book) {
-        int avail = inventoryService.getAvailableQuantity(book.getId());
+        return toBookResponse(book, inventoryService.getAvailableQuantity(book.getId()));
+    }
+
+    private BookResponse toBookResponse(Book book, int avail) {
         String status = inventoryValidator.determineStatus(avail).name();
         return new BookResponse(
                 book.getId(),
@@ -150,8 +154,12 @@ public class BookController {
         if (books == null || books.isEmpty()) {
             return List.of();
         }
-        // Use the same service-backed availability path as the single-book
-        // response so both endpoints always agree field-for-field.
-        return books.stream().map(this::toBookResponse).toList();
+        // Same availability values as the single-book endpoint, fetched in one
+        // query so the list view does not issue one query per book.
+        Map<Long, Integer> availability = inventoryService.getAvailableQuantities(
+                books.stream().map(Book::getId).toList());
+        return books.stream()
+                .map(book -> toBookResponse(book, availability.getOrDefault(book.getId(), 0)))
+                .toList();
     }
 }

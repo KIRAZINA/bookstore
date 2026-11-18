@@ -32,9 +32,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Collectors;
 
 @Service
 public class InventoryService {
@@ -88,6 +90,37 @@ public class InventoryService {
                 .orElse(0);
     }
 
+    /**
+     * Availability lookup for list endpoints. Reuses cached values where present so
+     * list and single-book responses always agree, and batch-fetches only cache
+     * misses to avoid one query per book.
+     */
+    public Map<Long, Integer> getAvailableQuantities(Collection<Long> bookIds) {
+        if (bookIds.isEmpty()) {
+            return Map.of();
+        }
+        Map<Long, Integer> result = new java.util.HashMap<>();
+        List<Long> misses = new java.util.ArrayList<>();
+        Cache cache = cacheManager != null ? cacheManager.getCache("inventoryAvailable") : null;
+        for (Long id : bookIds) {
+            Cache.ValueWrapper entry = cache != null ? cache.get(id) : null;
+            Object cached = entry != null ? entry.get() : null;
+            if (cached instanceof Integer value) {
+                result.put(id, value);
+            } else {
+                misses.add(id);
+            }
+        }
+        if (!misses.isEmpty()) {
+            Map<Long, Integer> fetched = inventoryRepository.findByBookIdIn(misses).stream()
+                    .collect(Collectors.toMap(Inventory::getBookId, Inventory::getAvailableQuantity));
+            for (Long id : misses) {
+                result.put(id, fetched.getOrDefault(id, 0));
+            }
+        }
+        return result;
+    }
+
     public int getReservedQuantity(Long bookId) {
         return inventoryRepository.findByBookId(bookId)
                 .map(Inventory::getReservedQuantity)
@@ -122,7 +155,7 @@ public class InventoryService {
         recordHistory(saved.getId(), bookId, InventoryEventType.RESERVED,
                 previousAvailable, saved.getAvailableQuantity(),
                 previousReserved, saved.getReservedQuantity(),
-                quantity, orderId, null, changedBy, "Order reservation");
+                quantity, orderId, changedBy, "Order reservation");
 
         businessMetrics.recordInventoryReservation();
         log.info("Reserved {} units of book {} for order {}", quantity, bookId, orderId);
@@ -156,7 +189,7 @@ public class InventoryService {
         recordHistory(saved.getId(), bookId, InventoryEventType.RELEASED,
                 previousAvailable, saved.getAvailableQuantity(),
                 previousReserved, saved.getReservedQuantity(),
-                quantity, orderId, null, changedBy, reason);
+                quantity, orderId, changedBy, reason);
 
         businessMetrics.recordInventoryRelease();
         log.info("Released {} units of book {} for order {}: {}", quantity, bookId, orderId, reason);
@@ -183,7 +216,7 @@ public class InventoryService {
         recordHistory(saved.getId(), bookId, InventoryEventType.FINALIZED,
                 previousAvailable, saved.getAvailableQuantity(),
                 previousReserved, saved.getReservedQuantity(),
-                quantity, orderId, null, "system", "Payment completed");
+                quantity, orderId, "system", "Payment completed");
 
         businessMetrics.recordInventoryFinalization();
         businessMetrics.recordBooksSold(quantity);
@@ -216,7 +249,7 @@ public class InventoryService {
         recordHistory(saved.getId(), bookId, InventoryEventType.RESTORED,
                 previousAvailable, saved.getAvailableQuantity(),
                 previousReserved, saved.getReservedQuantity(),
-                quantity, orderId, null, changedBy, reason);
+                quantity, orderId, changedBy, reason);
 
         businessMetrics.recordInventoryRestore();
         log.info("Restored {} units of book {} for order {}: {}", quantity, bookId, orderId, reason);
@@ -240,7 +273,7 @@ public class InventoryService {
         recordHistory(saved.getId(), bookId, InventoryEventType.CREATED,
                 null, saved.getAvailableQuantity(),
                 null, saved.getReservedQuantity(),
-                initialQuantity, null, null, "system", "Initial inventory creation");
+                initialQuantity, null, "system", "Initial inventory creation");
 
         log.info("Created inventory for book {} with {} units", bookId, initialQuantity);
         evictInventoryCacheEntries(bookId);
@@ -287,10 +320,6 @@ public class InventoryService {
         return historyRepository.findByBookIdOrderByCreatedAtDesc(bookId);
     }
 
-    public List<InventoryHistory> getHistoryForOrder(Long orderId) {
-        return historyRepository.findByOrderIdOrderByCreatedAtDesc(orderId);
-    }
-
     @Transactional(propagation = Propagation.REQUIRED)
     @Retryable(
         retryFor = OptimisticLockingFailureException.class,
@@ -320,7 +349,7 @@ public class InventoryService {
             recordHistory(saved.getId(), bookId, InventoryEventType.RELEASED,
                     previousAvailable, saved.getAvailableQuantity(),
                     previousReserved, saved.getReservedQuantity(),
-                    quantity, orderId, null, changedBy, reason);
+                    quantity, orderId, changedBy, reason);
 
             businessMetrics.recordInventoryRelease();
             log.info("Released {} units of book {} for order {}: {}", quantity, bookId, orderId, reason);
@@ -353,7 +382,7 @@ public class InventoryService {
             recordHistory(saved.getId(), bookId, InventoryEventType.FINALIZED,
                     previousAvailable, saved.getAvailableQuantity(),
                     previousReserved, saved.getReservedQuantity(),
-                    quantity, orderId, null, "system", "Payment completed");
+                    quantity, orderId, "system", "Payment completed");
 
             businessMetrics.recordInventoryFinalization();
             businessMetrics.recordBooksSold(quantity);
@@ -392,7 +421,7 @@ public class InventoryService {
             recordHistory(saved.getId(), bookId, InventoryEventType.RESTORED,
                     previousAvailable, saved.getAvailableQuantity(),
                     previousReserved, saved.getReservedQuantity(),
-                    quantity, orderId, null, changedBy, reason);
+                    quantity, orderId, changedBy, reason);
 
             businessMetrics.recordInventoryRestore();
             log.info("Restored {} units of book {} for order {}: {}", quantity, bookId, orderId, reason);
@@ -427,7 +456,7 @@ public class InventoryService {
             recordHistory(saved.getId(), entry.getKey(), InventoryEventType.RESERVED,
                     previousAvailable, saved.getAvailableQuantity(),
                     previousReserved, saved.getReservedQuantity(),
-                    entry.getValue(), orderId, null, changedBy, "Order reservation (batch)");
+                    entry.getValue(), orderId, changedBy, "Order reservation (batch)");
         }
         domainEventPublisher.publish(
                 new InventoryReservedEvent(orderId, Map.copyOf(bookQuantities)),
@@ -438,7 +467,7 @@ public class InventoryService {
     private void recordHistory(Long inventoryId, Long bookId, InventoryEventType eventType,
                                Integer prevAvail, Integer newAvail,
                                Integer prevRes, Integer newRes,
-                               int qtyChange, Long orderId, Long paymentId,
+                               int qtyChange, Long orderId,
                                String changedBy, String reason) {
         InventoryHistory history = new InventoryHistory();
         history.setInventoryId(inventoryId);
@@ -450,7 +479,6 @@ public class InventoryService {
         history.setNewReserved(newRes);
         history.setQuantityChange(qtyChange);
         history.setOrderId(orderId);
-        history.setPaymentId(paymentId);
         history.setChangedBy(changedBy);
         history.setReason(reason);
         historyRepository.save(history);

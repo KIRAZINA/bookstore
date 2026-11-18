@@ -169,12 +169,12 @@ class DatabaseFlywayIntegrationTest extends AbstractIntegrationTest {
         transactionTemplate.executeWithoutResult(status -> {
             List<Object[]> rows = entityManager
                     .createNativeQuery("SELECT version, COUNT(*), SUM(CASE WHEN success THEN 1 ELSE 0 END) "
-                            + "FROM flyway_schema_history GROUP BY version ORDER BY version")
+                            + "FROM flyway_schema_history GROUP BY version ORDER BY CAST(version AS INTEGER)")
                     .getResultList();
 
-            assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8"),
+            assertEquals(List.of("1", "2", "3", "4", "5", "6", "7", "8", "9", "10", "11", "12"),
                     rows.stream().map(r -> String.valueOf(r[0])).toList(),
-                    "Expected exactly the V1-V8 migrations in order");
+                    "Expected exactly the V1-V12 migrations in order");
             for (Object[] row : rows) {
                 assertEquals(1L, ((Number) row[1]).longValue(),
                         "Version " + row[0] + " must be applied exactly once");

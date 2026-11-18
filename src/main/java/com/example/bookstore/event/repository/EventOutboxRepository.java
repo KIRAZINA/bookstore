@@ -44,9 +44,6 @@ public interface EventOutboxRepository extends JpaRepository<EventOutbox, UUID> 
                                  @Param("maxRetries") int maxRetries,
                                  @Param("now") Instant now);
 
-    @Query("SELECT e FROM EventOutbox e WHERE e.status = 'PENDING' AND e.retryCount < :maxRetries AND e.createdAt < :before ORDER BY e.createdAt ASC")
-    List<EventOutbox> findPendingEventsOlderThan(Instant before, int maxRetries);
-
     /**
      * Fenced success mark (canonical name). Returns the number of rows updated; a zero
      * means the claim token no longer matches and the caller must not touch the row.

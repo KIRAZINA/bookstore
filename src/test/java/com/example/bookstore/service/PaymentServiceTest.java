@@ -1,5 +1,6 @@
 package com.example.bookstore.service;
 
+import com.example.bookstore.config.SecurityUtils;
 import com.example.bookstore.exception.InvalidPaymentStateException;
 import com.example.bookstore.exception.PaymentException;
 import com.example.bookstore.metrics.BusinessMetrics;
@@ -18,6 +19,9 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.security.access.AccessDeniedException;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.SimpleTransactionStatus;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -25,6 +29,7 @@ import java.util.Optional;
 
 import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -51,6 +56,12 @@ class PaymentServiceTest {
     @Mock
     private InventoryService inventoryService;
 
+    @Mock
+    private SecurityUtils securityUtils;
+
+    @Mock
+    private PlatformTransactionManager transactionManager;
+
     @InjectMocks
     private PaymentService paymentService;
 
@@ -72,6 +83,15 @@ class PaymentServiceTest {
         payment = new Payment(order, "DUMMY", PaymentStatus.PENDING, new BigDecimal("100.00"));
         payment.setId(1L);
         payment.onCreate();
+
+        lenient().when(transactionManager.getTransaction(any())).thenAnswer(inv -> new SimpleTransactionStatus());
+        lenient().when(securityUtils.getCurrentUser()).thenReturn(user);
+        lenient().when(paymentRepository.findPaymentIdByOrderId(anyLong())).thenReturn(Optional.of(1L));
+        lenient().when(paymentRepository.findOrderIdByPaymentId(anyLong())).thenReturn(Optional.of(1L));
+        lenient().when(paymentRepository.findById(anyLong())).thenReturn(Optional.of(payment));
+        lenient().when(paymentRepository.findByIdForUpdate(anyLong())).thenReturn(Optional.of(payment));
+        lenient().when(orderRepository.findById(anyLong())).thenReturn(Optional.of(order));
+        lenient().when(orderRepository.findByIdAndUserId(anyLong(), anyLong())).thenReturn(Optional.of(order));
     }
 
     @Nested
@@ -113,7 +133,7 @@ class PaymentServiceTest {
         void getPaymentByOrderId_NotFound() {
             when(paymentRepository.findByOrderId(99L)).thenReturn(Optional.empty());
 
-            assertThrows(PaymentException.class, () -> paymentService.getPaymentByOrderId(99L));
+            assertThrows(AccessDeniedException.class, () -> paymentService.getPaymentByOrderId(99L));
         }
     }
 
@@ -123,7 +143,6 @@ class PaymentServiceTest {
         @Test
         @DisplayName("Completes payment and transitions order to PAID")
         void processPayment_Success() {
-            when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.of(payment));
             when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
             when(paymentProvider.getName()).thenReturn("DUMMY");
             when(paymentProvider.processPayment(any(Payment.class)))
@@ -147,7 +166,7 @@ class PaymentServiceTest {
     @DisplayName("Throws when payment already completed")
     void processPayment_AlreadyCompleted() {
         payment.setPaymentStatus(PaymentStatus.COMPLETED);
-        when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.of(payment));
+        order.setStatus(OrderStatus.PAID);
 
         assertThrows(InvalidPaymentStateException.class, () -> paymentService.processPayment(1L, "card"));
         verify(paymentRepository, never()).save(any());
@@ -157,7 +176,6 @@ class PaymentServiceTest {
     @DisplayName("Throws when payment is cancelled")
     void processPayment_Cancelled() {
         payment.setPaymentStatus(PaymentStatus.CANCELLED);
-        when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.of(payment));
 
         assertThrows(InvalidPaymentStateException.class, () -> paymentService.processPayment(1L, "card"));
     }
@@ -165,9 +183,9 @@ class PaymentServiceTest {
         @Test
         @DisplayName("Payment not found throws PaymentException")
         void processPayment_OrderNotFound() {
-            when(paymentRepository.findByOrderId(99L)).thenReturn(Optional.empty());
+            when(paymentRepository.findPaymentIdByOrderId(99L)).thenReturn(Optional.empty());
 
-            assertThrows(PaymentException.class, () -> paymentService.processPayment(99L, "card"));
+            assertThrows(AccessDeniedException.class, () -> paymentService.processPayment(99L, "card"));
         }
     }
 
@@ -190,6 +208,7 @@ class PaymentServiceTest {
     @DisplayName("Throws when payment already completed")
     void cancelPayment_AlreadyCompleted() {
         payment.setPaymentStatus(PaymentStatus.COMPLETED);
+        order.setStatus(OrderStatus.PAID);
         when(paymentRepository.findByOrderId(1L)).thenReturn(Optional.of(payment));
 
         assertThrows(InvalidPaymentStateException.class, () -> paymentService.cancelPayment(1L));
@@ -203,6 +222,7 @@ class PaymentServiceTest {
         @DisplayName("Refunds COMPLETED payment through two-phase transaction")
         void refundPayment_Success() {
             payment.setPaymentStatus(PaymentStatus.COMPLETED);
+        order.setStatus(OrderStatus.PAID);
             payment.setTransactionId("TXN-123");
 
             when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
@@ -222,6 +242,7 @@ class PaymentServiceTest {
         @DisplayName("Preserves inventory on successful refund")
         void refundPayment_RestoresStock() {
             payment.setPaymentStatus(PaymentStatus.COMPLETED);
+        order.setStatus(OrderStatus.PAID);
             payment.setTransactionId("TXN-123");
             OrderItem item = new OrderItem();
             Book book = new Book();
@@ -245,6 +266,7 @@ class PaymentServiceTest {
         @DisplayName("External provider not called inside DB transaction")
         void refundPayment_ExternalCallOutsideTransaction() {
             payment.setPaymentStatus(PaymentStatus.COMPLETED);
+        order.setStatus(OrderStatus.PAID);
             payment.setTransactionId("TXN-123");
 
             when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
@@ -262,6 +284,7 @@ class PaymentServiceTest {
         @DisplayName("Returns to COMPLETED on refund failure")
         void refundPayment_ProviderFailure_ReturnsToCompleted() {
             payment.setPaymentStatus(PaymentStatus.COMPLETED);
+        order.setStatus(OrderStatus.PAID);
             payment.setTransactionId("TXN-123");
 
             when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
@@ -278,8 +301,6 @@ class PaymentServiceTest {
         @Test
         @DisplayName("Throws when refunding PENDING payment")
         void refundPayment_Pending_Throws() {
-            when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
-
             assertThrows(InvalidPaymentStateException.class, () -> paymentService.refundPayment(1L));
         }
 
@@ -287,7 +308,6 @@ class PaymentServiceTest {
         @DisplayName("Throws when refunding already refunded payment")
         void refundPayment_AlreadyRefunded_Throws() {
             payment.setPaymentStatus(PaymentStatus.REFUNDED);
-            when(paymentRepository.findById(1L)).thenReturn(Optional.of(payment));
 
             assertThrows(InvalidPaymentStateException.class, () -> paymentService.refundPayment(1L));
         }

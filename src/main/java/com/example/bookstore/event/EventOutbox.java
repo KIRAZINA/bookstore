@@ -120,16 +120,6 @@ public EventOutbox(UUID id, String aggregateType, String aggregateId, String eve
     public Instant getUpdatedAt() { return updatedAt; }
     public UUID getClaimToken() { return claimToken; }
 
-    public void markPublished() {
-        this.status = OutboxStatus.PUBLISHED;
-        this.publishedAt = Instant.now();
-    }
-
-    public void markFailed() {
-        this.status = OutboxStatus.FAILED;
-        this.publishedAt = Instant.now();
-    }
-
     public void incrementRetry() {
         this.retryCount++;
     }

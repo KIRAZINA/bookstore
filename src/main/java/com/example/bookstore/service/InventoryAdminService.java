@@ -114,10 +114,6 @@ public class InventoryAdminService {
         return historyRepository.findByBookId(bookId, pageable);
     }
 
-    public List<InventoryHistory> getHistoryForOrder(Long orderId) {
-        return inventoryService.getHistoryForOrder(orderId);
-    }
-
     public List<Inventory> getInventoryByStatus(InventoryStatus status) {
         switch (status) {
             case OUT_OF_STOCK -> {

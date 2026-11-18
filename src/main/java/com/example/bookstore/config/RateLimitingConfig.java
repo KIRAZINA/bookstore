@@ -3,8 +3,6 @@ package com.example.bookstore.config;
 import jakarta.servlet.*;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.web.servlet.FilterRegistrationBean;
 import org.springframework.context.annotation.Bean;
@@ -18,8 +16,6 @@ import java.time.Duration;
 @Configuration
 @ConditionalOnProperty(name = "app.rate-limiting.enabled", havingValue = "true", matchIfMissing = true)
 public class RateLimitingConfig {
-
-    private static final Logger log = LoggerFactory.getLogger(RateLimitingConfig.class);
 
     static final Duration WINDOW = Duration.ofMinutes(1);
 
@@ -93,11 +89,11 @@ public class RateLimitingConfig {
         private LimitConfig getLimitForPath(String path) {
             String group = resolveLimitGroup(path);
             return switch (group) {
-                case "auth" -> new LimitConfig(5, 60);
-                case "checkout" -> new LimitConfig(20, 60);
-                case "admin" -> new LimitConfig(60, 60);
-                case "api" -> new LimitConfig(100, 60);
-                default -> new LimitConfig(200, 60);
+                case "auth" -> new LimitConfig(5);
+                case "checkout" -> new LimitConfig(20);
+                case "admin" -> new LimitConfig(60);
+                case "api" -> new LimitConfig(100);
+                default -> new LimitConfig(200);
             };
         }
 
@@ -113,6 +109,6 @@ public class RateLimitingConfig {
             return request.getRemoteAddr();
         }
 
-        private record LimitConfig(int limit, int windowSeconds) {}
+        private record LimitConfig(int limit) {}
     }
 }

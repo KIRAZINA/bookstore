@@ -30,7 +30,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.when;
 
 /**
- * Wave 4D persistence evidence: V12 columns exist with the specified types on a real
+ * Persistence evidence: V12 columns exist with the specified types on a real
  * Postgres, and the refund success path writes the three refund fields while preserving
  * the original {@code transaction_id}.
  *

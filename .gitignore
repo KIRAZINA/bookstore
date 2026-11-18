@@ -81,12 +81,4 @@ spotbugsXml.xml
 k8s/secret.local.yaml
 k8s/*.local.yaml
 
-# Audit artifacts — ignored by default; explicitly tracked ones are excepted below
-AUDIT_*.md
-!AUDIT_REGISTER.md
-RUNBOOK_*.md
-!RUNBOOK_S16_JWT_SECRET_ROTATION.md
-
-# Wave evidence artifacts — kept as local docs, never committed
-WAVE*_REPORT.md
-WAVE*_GROUND_TRUTH.md
+# Local audit and wave artifacts are archived outside the repository.
