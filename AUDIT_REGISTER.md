@@ -258,7 +258,7 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 | RES-4A1-ENTITYMANAGER-CLEAR-SIDE-EFFECT | MEDIUM | EntityManager.clear() side effect | `REMOVED` | Wave 4A.1.2 | CURATOR_VERDICT |
 | RES-4A1-TEST-HYGIENE-EVIDENCE | LOW | Test hygiene (@Timeout/daemon/interrupt) | `FIXED` | Wave 4A.1.2 | CURATOR_VERDICT |
 | RES-4A1-2-SYNCHRONIZATION-DIAGNOSTIC-DEBT | LOW | isSynchronizationActive=true diagnostic | `CLOSED_DOCUMENTATION` | 5B | 5B observation |
-| RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE | MEDIUM | `isSynchronizationActive=true` at provider boundary despite `isActualTransactionActive=false`; on all 4 provider-call paths | `DEFERRED` | 5C | Wave 5B observation |
+| RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE | MEDIUM | `isSynchronizationActive=true` at provider boundary despite `isActualTransactionActive=false`; on all 4 provider-call paths | `CLOSED_DOCUMENTATION` | 5C | Spring 7.0.8 source + SynchronizationDiagnosticTest |
 | RES-4A1-2-PROVIDER-DETACHED-ENTITY-CONSTRAINT | MEDIUM | Provider receives detached entity | `ACCEPTED_PROVISIONAL` | TBD | 5A |
 | RES-4B1-VERIFICATION-BLOCKED | HIGH | 4B.1 implementation/migration/tests present but unverified; Maven execution rejected | `CLOSED_RED_GREEN` | Wave 4B.1 | WAVE4B_2_REPORT §10 |
 | RES-4B1-V9-MIGRATION-UNVERIFIED | HIGH | V9 unique partial index added but duplicate precheck never executed; safe only on fresh Testcontainers DB | `CLOSED_RED_GREEN` | Wave 4B.1 | WAVE4B_2_REPORT §10 |
@@ -280,10 +280,35 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 - Hypothesis A: Spring version-specific `NOT_SUPPORTED` semantic that
   suspends the transaction but not the synchronizations thread-local.
 - Hypothesis B: thread-local leak from a prior test in the same JVM.
-- Investigation deferred to Wave 5C. Must confirm: does the stale
-  synchronization fire on a subsequent transaction commit, and does that
-  produce any downstream side effect?
+- Investigation was deferred to Wave 5C and resolved there (expected Spring
+  behavior; empty inert scope) — see Wave 5C notes below.
 - Source: `PaymentTransactionBoundaryIntegrationTest:160-170` comment block.
+
+**Wave 5C notes (RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE)**:
+- Spring version investigated: Spring Framework **7.0.8** (Boot parent 4.0.7), `spring-tx-7.0.8-sources.jar`.
+- Source finding: `AbstractPlatformTransactionManager.suspend()` (`:614-648`) calls
+  `doSuspendSynchronization()` (`:700-708`), whose last statement is
+  `TransactionSynchronizationManager.clearSynchronization()` (`:706`). The
+  `PROPAGATION_NOT_SUPPORTED` branch (`:435-443`) then uses
+  `newSynchronization = (getTransactionSynchronization() == SYNCHRONIZATION_ALWAYS)`
+  (`:440`; default `SYNCHRONIZATION_ALWAYS` at `:130`), and
+  `prepareSynchronization()` (`:575-585`) calls `initSynchronization()` (`:583`),
+  creating a fresh empty set. `isSynchronizationActive()` (`:307-309`) returns
+  `(synchronizations.get() != null)` — an empty set satisfies the check.
+- Three-point snapshots (identical in `providerBoundary_insideCallerTransaction_*` and
+  `providerBoundary_outsideCallerTransaction_*`, stable across three runs):
+  `before: actual=false, sync=false, count=-1`;
+  `provider: actual=false, sync=true, count=0`;
+  `after: actual=false, sync=false, count=-1`.
+  The flag is `true` with **zero** registered synchronizations — an inert scope.
+- Sentinel test (`synchronizationsRegisteredBeforeProvider_doNotFireDuringProvider`):
+  caller synchronization count = 1 before and after the provider call; sentinel
+  recorded five `suspend`/`resume` pairs across the phase fences, no
+  `beforeCommit`/`beforeCompletion`/`afterCommit`/`afterCompletion` during the
+  provider call, and `afterCommit` only when the caller transaction completed.
+- Classification: **CLOSED_DOCUMENTATION** — expected Spring 7.0.8 `NOT_SUPPORTED`
+  behavior (hypothesis A), with an empty, inert synchronization scope; the
+  `isActualTransactionActive=false` correctness invariant is unchanged. No 5D.
 
 **S16 runbook debt notes**:
 - `RUNBOOK_S16_JWT_SECRET_ROTATION.md` was absent from the working tree and tracked HEAD; 9 t3-checkpoint commits in git history contain it (latest `54bcc10`, 2026-11-10).
@@ -327,6 +352,7 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 | Wave 4C | recordTransition atomicity + V11 | `CLOSED` (`affcdda`) | none | done |
 | Wave 4D | M19 refund record integrity + V12 | `CLOSED` (`1e39910`) | none | done |
 | Wave 5B | H2→Postgres E2E migration + sync observation | `CLOSED` | none | done |
+| Wave 5C | Synchronization-flag investigation | `CLOSED` | none | done |
 | H2 migration | PurchaseFlowE2ETest | `CLOSED` | none | done |
 | E2E coverage | T12 + coordination | `BLOCKED_MISSING_SOURCE` | AUDIT_TESTS.md unrecoverable | blocked |
 
@@ -411,11 +437,11 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 
 ## 9. Acceptance Gate for Next Implementation Wave
 
-**Current status**: Arc 4 complete. All gate requirements satisfied; Wave 5B unblocked.
+**Current status**: Arc 4 and Arc 5 complete. All gate requirements satisfied; no open implementation wave.
 
-**Next allowed step**: Wave 5C — investigate `RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE` (`isSynchronizationActive=true` at the provider boundary).
+**Next allowed step**: none — all residuals are closed, accepted-operational, or `BLOCKED_MISSING_SOURCE`.
 
-**Project-level gate**: test execution restored; full canonical regression green through 4D (145/145). 5A is documentation-only.
+**Project-level gate**: test execution restored; full canonical regression green through 5B (154/154). 5C is investigation-only.
 
 **Gate requirements**:
 - `RES-4B1-VERIFICATION-BLOCKED` and `RES-4B1-V9-MIGRATION-UNVERIFIED`: `CLOSED_RED_GREEN` ✓ (WAVE4B_2_REPORT §10)
@@ -454,7 +480,7 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 **Recommendation**: Arc 4 complete. Arc 5:
 - 5A: audit trail reconciled (this wave) — CLOSED
 - 5B: H2→Postgres E2E migration + synchronization observation documented (this wave) — CLOSED
-- 5C: investigate `RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE` — next
+- 5C: synchronization-flag investigation — `CLOSED_DOCUMENTATION` (expected Spring 7.0.8 behavior; empty inert scope) — this wave
 T12 and RES-WAVE2B-2C-COORDINATION-E2E-GAP: `BLOCKED_MISSING_SOURCE` (AUDIT_TESTS.md unrecoverable; no other source defines the ~7 methods)
 
 **Rationale**:
