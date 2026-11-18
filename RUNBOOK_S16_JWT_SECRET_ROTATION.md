@@ -1,12 +1,12 @@
-﻿# RECOVERED FROM GIT HISTORY
+# RECOVERED FROM GIT HISTORY
 
 This file was recovered from commit 54bcc10 on 2026-11-18. It was previously
 claimed in AUDIT_REGISTER.md as "reconstruction added" but was not on disk
 at HEAD. The content is the version committed at 54bcc10 and MUST be verified
 against the target environment before use. See RES-S16-RUNBOOK-MISSING.
-# RUNBOOK S16 тАФ JWT Signing Secret Rotation
+# RUNBOOK S16 — JWT Signing Secret Rotation
 
-> RECONSTRUCTED тАФ the original runbook was created in Wave 1B but is absent from the
+> RECONSTRUCTED — the original runbook was created in Wave 1B but is absent from the
 > working tree and from all Git history. This reconstruction is based on the
 > curator-provided S16 context and the current repository configuration.
 > An operator must verify these steps against the target environment before use.

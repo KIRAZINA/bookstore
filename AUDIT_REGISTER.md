@@ -257,7 +257,8 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 | RES-4A1-CALLER-TX-AFTER-REFUND-COMMIT-GAP | LOW | Caller transaction after refund commit gap | `CLOSED_GREEN_ONLY_RED_DEBT` | Wave 4A.1 | WAVE4A_REPORT §4 "Cancel-own-order gate" |
 | RES-4A1-ENTITYMANAGER-CLEAR-SIDE-EFFECT | MEDIUM | EntityManager.clear() side effect | `REMOVED` | Wave 4A.1.2 | CURATOR_VERDICT |
 | RES-4A1-TEST-HYGIENE-EVIDENCE | LOW | Test hygiene (@Timeout/daemon/interrupt) | `FIXED` | Wave 4A.1.2 | CURATOR_VERDICT |
-| RES-4A1-2-SYNCHRONIZATION-DIAGNOSTIC-DEBT | LOW | isSynchronizationActive=true diagnostic | `DEFERRED` | 5B | 5A |
+| RES-4A1-2-SYNCHRONIZATION-DIAGNOSTIC-DEBT | LOW | isSynchronizationActive=true diagnostic | `CLOSED_DOCUMENTATION` | 5B | 5B observation |
+| RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE | MEDIUM | `isSynchronizationActive=true` at provider boundary despite `isActualTransactionActive=false`; on all 4 provider-call paths | `DEFERRED` | 5C | Wave 5B observation |
 | RES-4A1-2-PROVIDER-DETACHED-ENTITY-CONSTRAINT | MEDIUM | Provider receives detached entity | `ACCEPTED_PROVISIONAL` | TBD | 5A |
 | RES-4B1-VERIFICATION-BLOCKED | HIGH | 4B.1 implementation/migration/tests present but unverified; Maven execution rejected | `CLOSED_RED_GREEN` | Wave 4B.1 | WAVE4B_2_REPORT §10 |
 | RES-4B1-V9-MIGRATION-UNVERIFIED | HIGH | V9 unique partial index added but duplicate precheck never executed; safe only on fresh Testcontainers DB | `CLOSED_RED_GREEN` | Wave 4B.1 | WAVE4B_2_REPORT §10 |
@@ -265,11 +266,24 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 | RES-S16-RUNBOOK-MISSING | MEDIUM | JWT secret rotation runbook missing from working tree and Git history | `CLOSED_DOCUMENTATION` | 5A | 54bcc10 |
 | RES-CONTROLLER-INVENTORY-ASSERTION-DEBT | LOW | Controller inventory assertion | `ACCEPTED_PROVISIONAL` | Wave 2C-small | 5A |
 | RES-H2-PURCHASE-FLOW-OBSOLETE-ASSERTIONS | MEDIUM | PurchaseFlowE2ETest obsolete assertions | `CLOSED_DISABLEMENT` | 2C-H2.0 | CURATOR_VERDICT |
-| RES-H2-TESTS-ACTIVE-IN-CI | MEDIUM | H2 tests run in CI | `DEFERRED` | 5B | GROUND_TRUTH |
+| RES-H2-TESTS-ACTIVE-IN-CI | MEDIUM | H2 tests run in CI | `CLOSED_RED_GREEN` | 5B | AbstractE2ETest Postgres container + mvnw transcript |
 | RES-WAVE2B-2C-COORDINATION-E2E-GAP | MEDIUM | Missing E2E coordination coverage | `BLOCKED_MISSING_SOURCE` | E2E wave | §10: AUDIT_TESTS.md 0 commits |
 
 **Wave 5A notes (RES-2B-RED-FIRST-DEBT)**:
 - Absorbed into `RES-AUDIT-TRAIL-DEBT`; resolved together in 5A (`CLOSED_DOCUMENTATION`).
+
+**Wave 5B notes (RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE)**:
+- Observed on `processPaymentCalledWithinCallerTransaction_*`,
+  `refundPaymentCalledWithinCallerTransaction_*`, and the two caller-delegation
+  refund paths. `isActualTransactionActive=false` (correct invariant);
+  `isSynchronizationActive=true` on the same calls.
+- Hypothesis A: Spring version-specific `NOT_SUPPORTED` semantic that
+  suspends the transaction but not the synchronizations thread-local.
+- Hypothesis B: thread-local leak from a prior test in the same JVM.
+- Investigation deferred to Wave 5C. Must confirm: does the stale
+  synchronization fire on a subsequent transaction commit, and does that
+  produce any downstream side effect?
+- Source: `PaymentTransactionBoundaryIntegrationTest:160-170` comment block.
 
 **S16 runbook debt notes**:
 - `RUNBOOK_S16_JWT_SECRET_ROTATION.md` was absent from the working tree and tracked HEAD; 9 t3-checkpoint commits in git history contain it (latest `54bcc10`, 2026-11-10).
@@ -284,7 +298,7 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 **Wave 4A.1.2 notes**:
 - `EntityManager.clear()` removed (primitive-ID pattern)
 - Test hygiene fixed (awaitTermination + interrupt flag)
-- `RES-4A1-2-SYNCHRONIZATION-DIAGNOSTIC-DEBT` deferred to Wave 5B (verification test needed)
+- `RES-4A1-2-SYNCHRONIZATION-DIAGNOSTIC-DEBT` closed in 5B by observation documentation; investigation escalated to `RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE` (5C)
 - `RES-4A1-2-PROVIDER-DETACHED-ENTITY-CONSTRAINT` documented (future provider design constraint)
 
 ---
@@ -312,7 +326,8 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 | Wave 4B.5 | Outbox two-phase claim + fenced mark + stale reaper | `CLOSED` (`47d041a`) | none | done |
 | Wave 4C | recordTransition atomicity + V11 | `CLOSED` (`affcdda`) | none | done |
 | Wave 4D | M19 refund record integrity + V12 | `CLOSED` (`1e39910`) | none | done |
-| H2 migration | PurchaseFlowE2ETest | `DEFERRED` | Test harness debt | Wave 5B |
+| Wave 5B | H2→Postgres E2E migration + sync observation | `CLOSED` | none | done |
+| H2 migration | PurchaseFlowE2ETest | `CLOSED` | none | done |
 | E2E coverage | T12 + coordination | `BLOCKED_MISSING_SOURCE` | AUDIT_TESTS.md unrecoverable | blocked |
 
 ---
@@ -323,7 +338,7 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 |---|---|---|---|
 | CORRECTION-PAYMENT-INTEGRATION-HARNESS | 2C-H2.0 | `ACCEPTED` | PaymentIntegrationTest is Testcontainers, not H2 |
 | RES-H2-PURCHASE-FLOW-OBSOLETE-ASSERTIONS | 2C-H2.0 | `CLOSED_DISABLEMENT` | 3 obsolete methods disabled |
-| RES-H2-TESTS-ACTIVE-IN-CI | 2C-H2.0 | `DEFERRED` | Wave 5B; 6 non-obsolete H2 methods remain active |
+| RES-H2-TESTS-ACTIVE-IN-CI | 2C-H2.0 | `CLOSED_RED_GREEN` | PurchaseFlowE2ETest migrated to Testcontainers Postgres in 5B; 3 methods remain @Disabled with pre-existing non-H2 reasons; 6 active pass on Postgres |
 
 ---
 
@@ -398,7 +413,7 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 
 **Current status**: Arc 4 complete. All gate requirements satisfied; Wave 5B unblocked.
 
-**Next allowed step**: Wave 5B — H2 test migration + RES-4A1-2 synchronization verification test.
+**Next allowed step**: Wave 5C — investigate `RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE` (`isSynchronizationActive=true` at the provider boundary).
 
 **Project-level gate**: test execution restored; full canonical regression green through 4D (145/145). 5A is documentation-only.
 
@@ -406,7 +421,7 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 - `RES-4B1-VERIFICATION-BLOCKED` and `RES-4B1-V9-MIGRATION-UNVERIFIED`: `CLOSED_RED_GREEN` ✓ (WAVE4B_2_REPORT §10)
 - `RES-AUDIT-TRAIL-DEBT`: `CLOSED_DOCUMENTATION` by 5A (this commit) ✓
 - Wave 4B ground truth informed 4C/4D ✓
-- H2 migration: targets Wave 5B (`RES-H2-TESTS-ACTIVE-IN-CI`)
+- H2 migration: completed in 5B (`RES-H2-TESTS-ACTIVE-IN-CI` = `CLOSED_RED_GREEN`)
 
 **Curator waiver**: Documentation debt accepted for Wave 4A.1.2 closure; resolved by 5A.
 
@@ -438,11 +453,12 @@ mapped to a real value: `DEFERRED` (still pending, target wave set), or
 
 **Recommendation**: Arc 4 complete. Arc 5:
 - 5A: audit trail reconciled (this wave) — CLOSED
-- 5B: H2 test migration + RES-4A1-2 synchronization test — ready to start
+- 5B: H2→Postgres E2E migration + synchronization observation documented (this wave) — CLOSED
+- 5C: investigate `RES-4A1-2-SYNCHRONIZATION-OBSERVED-TRUE` — next
 T12 and RES-WAVE2B-2C-COORDINATION-E2E-GAP: `BLOCKED_MISSING_SOURCE` (AUDIT_TESTS.md unrecoverable; no other source defines the ~7 methods)
 
 **Rationale**:
 - PaymentService fully closed (Wave 4A/4A.1/4A.1.2/4D)
 - Arc 4 waves 4B.1–4B.5, 4C, 4D all CLOSED
-- Documentation debt resolved in 5A
-- Wave 5B unblocked after 5A
+- Documentation debt resolved in 5A; H2 test debt resolved in 5B
+- Synchronization observation escalated to 5C; no assertion locks in unexplained behavior
