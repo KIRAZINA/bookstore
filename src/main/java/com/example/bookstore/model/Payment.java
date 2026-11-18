@@ -63,6 +63,16 @@ public class Payment {
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
 
+    /** Refund fields (4D / D-REFUND-1). All nullable; populated only on a successful refund. */
+    @Column(name = "refunded_amount", precision = 19, scale = 2)
+    private BigDecimal refundedAmount;
+
+    @Column(name = "refunded_at")
+    private LocalDateTime refundedAt;
+
+    @Column(name = "refund_transaction_id")
+    private String refundTransactionId;
+
     @Version
     private Long version;
 

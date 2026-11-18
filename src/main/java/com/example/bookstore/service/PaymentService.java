@@ -349,7 +349,12 @@ public class PaymentService {
         AppUser user = order.getUser();
 
         if (providerResponse.isSuccess()) {
-            reloaded.setTransactionId(providerResponse.getTransactionId());
+            // D-REFUND-1: transaction_id is the ORIGINAL payment transaction id and must
+            // survive the refund. The provider's refund id is recorded separately so the
+            // payment can still be reconciled against the provider ledger.
+            reloaded.setRefundedAmount(reloaded.getAmount());
+            reloaded.setRefundedAt(LocalDateTime.now());
+            reloaded.setRefundTransactionId(providerResponse.getTransactionId());
             reloaded.recordTransition(PaymentStatus.REFUNDED, "system", "Payment refunded");
             inventoryService.restoreAllStockForOrder(
                     getOrderItemQuantities(order), order.getId(),
