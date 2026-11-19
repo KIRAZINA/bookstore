@@ -73,11 +73,11 @@ public class BookService {
 
     @Cacheable(cacheNames = "books", key = "T(com.example.bookstore.service.BookService).searchCacheKey(#search)")
     public List<Book> searchBooks(String search) {
-        if (search == null) search = "";
-        if (search.trim().length() > 128) {
+        String normalized = search == null ? "" : search.trim();
+        if (normalized.length() > 128) {
             throw new IllegalArgumentException("Search term too long");
         }
-        return bookRepository.findByTitleOrAuthor(search.trim());
+        return bookRepository.findByTitleOrAuthor(normalized);
     }
 
     public List<Book> getAllBooks(int page, int size) {
@@ -91,8 +91,7 @@ public class BookService {
     }
 
     public List<Book> searchBooks(String search, int page, int size) {
-        if (search == null) search = "";
-        String normalized = search.trim();
+        String normalized = search == null ? "" : search.trim();
         if (normalized.length() > 128) {
             throw new IllegalArgumentException("Search term too long");
         }
@@ -146,34 +145,17 @@ public class BookService {
     }
 
     private void evictBooksCache() {
-        try {
-            if (redisTemplate != null) {
-                ScanOptions options = ScanOptions.scanOptions().match(BOOKS_PREFIX + "*").count(100).build();
-                try (Cursor<String> cursor = redisTemplate.scan(options)) {
-                    List<String> batch = new ArrayList<>();
-                    while (cursor.hasNext()) {
-                        batch.add(cursor.next());
-                        if (batch.size() >= 100) {
-                            redisTemplate.delete(batch);
-                            batch.clear();
-                        }
-                    }
-                    if (!batch.isEmpty()) {
-                        redisTemplate.delete(batch);
-                    }
-                }
-            } else {
-                Objects.requireNonNull(cacheManager.getCache("books")).clear();
-            }
-        } catch (RuntimeException e) {
-            log.warn("Failed to evict books cache: {}", e.getMessage());
-        }
+        evictCacheByPrefix(BOOKS_PREFIX, "books");
     }
 
     private void evictBookByIdCache() {
+        evictCacheByPrefix(BOOK_BY_ID_PREFIX, "bookById");
+    }
+
+    private void evictCacheByPrefix(String keyPrefix, String cacheName) {
         try {
             if (redisTemplate != null) {
-                ScanOptions options = ScanOptions.scanOptions().match(BOOK_BY_ID_PREFIX + "*").count(100).build();
+                ScanOptions options = ScanOptions.scanOptions().match(keyPrefix + "*").count(100).build();
                 try (Cursor<String> cursor = redisTemplate.scan(options)) {
                     List<String> batch = new ArrayList<>();
                     while (cursor.hasNext()) {
@@ -188,10 +170,10 @@ public class BookService {
                     }
                 }
             } else {
-                Objects.requireNonNull(cacheManager.getCache("bookById")).clear();
+                Objects.requireNonNull(cacheManager.getCache(cacheName)).clear();
             }
         } catch (RuntimeException e) {
-            log.warn("Failed to evict bookById cache: {}", e.getMessage());
+            log.warn("Failed to evict {} cache: {}", cacheName, e.getMessage());
         }
     }
 }

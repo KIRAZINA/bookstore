@@ -178,6 +178,11 @@ public class InventoryService {
             return getInventoryOrThrow(bookId);
         }
 
+        return releaseReservationInternal(bookId, quantity, orderId, changedBy, reason);
+    }
+
+    private Inventory releaseReservationInternal(Long bookId, int quantity, Long orderId,
+                                                  String changedBy, String reason) {
         Inventory inventory = getInventoryOrThrow(bookId);
         validator.validateRelease(inventory, quantity);
 
@@ -205,6 +210,10 @@ public class InventoryService {
     )
     @CacheEvict(cacheNames = {"inventory", "inventoryAvailable"}, key = "#bookId")
     public Inventory finalizeReservation(Long bookId, int quantity, Long orderId) {
+        return finalizeReservationInternal(bookId, quantity, orderId);
+    }
+
+    private Inventory finalizeReservationInternal(Long bookId, int quantity, Long orderId) {
         Inventory inventory = getInventoryOrThrow(bookId);
         validator.validateFinalization(inventory, quantity);
 
@@ -338,21 +347,7 @@ public class InventoryService {
                 continue;
             }
 
-            Inventory inventory = getInventoryOrThrow(bookId);
-            validator.validateRelease(inventory, quantity);
-
-            int previousAvailable = inventory.getAvailableQuantity();
-            int previousReserved = inventory.getReservedQuantity();
-            inventory.release(quantity);
-            Inventory saved = inventoryRepository.save(inventory);
-
-            recordHistory(saved.getId(), bookId, InventoryEventType.RELEASED,
-                    previousAvailable, saved.getAvailableQuantity(),
-                    previousReserved, saved.getReservedQuantity(),
-                    quantity, orderId, changedBy, reason);
-
-            businessMetrics.recordInventoryRelease();
-            log.info("Released {} units of book {} for order {}: {}", quantity, bookId, orderId, reason);
+            releaseReservationInternal(bookId, quantity, orderId, changedBy, reason);
         }
         domainEventPublisher.publish(
                 new InventoryReleasedEvent(orderId, orderItems, reason),
@@ -371,22 +366,7 @@ public class InventoryService {
         for (Map.Entry<Long, Integer> entry : orderItems.entrySet()) {
             Long bookId = entry.getKey();
             int quantity = entry.getValue();
-            Inventory inventory = getInventoryOrThrow(bookId);
-            validator.validateFinalization(inventory, quantity);
-
-            int previousAvailable = inventory.getAvailableQuantity();
-            int previousReserved = inventory.getReservedQuantity();
-            inventory.finalizeReservation(quantity);
-            Inventory saved = inventoryRepository.save(inventory);
-
-            recordHistory(saved.getId(), bookId, InventoryEventType.FINALIZED,
-                    previousAvailable, saved.getAvailableQuantity(),
-                    previousReserved, saved.getReservedQuantity(),
-                    quantity, orderId, "system", "Payment completed");
-
-            businessMetrics.recordInventoryFinalization();
-            businessMetrics.recordBooksSold(quantity);
-            log.info("Finalized {} units of book {} for order {}", quantity, bookId, orderId);
+            finalizeReservationInternal(bookId, quantity, orderId);
         }
         domainEventPublisher.publish(
                 new InventoryFinalizedEvent(orderId, orderItems),

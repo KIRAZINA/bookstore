@@ -39,7 +39,7 @@ public class BookController {
     }
 
     @GetMapping
-    public org.springframework.http.ResponseEntity<List<BookResponse>> getAllBooks(
+    public ResponseEntity<List<BookResponse>> getAllBooks(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         if (page < 0) {
@@ -50,17 +50,15 @@ public class BookController {
         boolean truncated = fetched.size() > pageSize;
         List<Book> pageBooks = fetched.size() > pageSize ? fetched.subList(0, pageSize) : fetched;
         List<BookResponse> body = toBookResponses(pageBooks);
-        org.springframework.http.ResponseEntity<List<BookResponse>> response =
-                org.springframework.http.ResponseEntity.ok()
-                        .header("X-Page", String.valueOf(page))
-                        .header("X-Page-Size", String.valueOf(pageSize))
-                        .header("X-Truncated", String.valueOf(truncated))
-                        .body(body);
-        return response;
+        return ResponseEntity.ok()
+                .header("X-Page", String.valueOf(page))
+                .header("X-Page-Size", String.valueOf(pageSize))
+                .header("X-Truncated", String.valueOf(truncated))
+                .body(body);
     }
 
     @GetMapping("/category")
-    public org.springframework.http.ResponseEntity<List<BookResponse>> getBooksByCategory(
+    public ResponseEntity<List<BookResponse>> getBooksByCategory(
             @RequestParam String category,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -71,7 +69,7 @@ public class BookController {
         List<Book> fetched = bookService.getBooksByCategory(category, page, pageSize + 1);
         boolean truncated = fetched.size() > pageSize;
         List<Book> pageBooks = fetched.size() > pageSize ? fetched.subList(0, pageSize) : fetched;
-        return org.springframework.http.ResponseEntity.ok()
+        return ResponseEntity.ok()
                 .header("X-Page", String.valueOf(page))
                 .header("X-Page-Size", String.valueOf(pageSize))
                 .header("X-Truncated", String.valueOf(truncated))
@@ -79,7 +77,7 @@ public class BookController {
     }
 
     @GetMapping("/search")
-    public org.springframework.http.ResponseEntity<List<BookResponse>> searchBooks(
+    public ResponseEntity<List<BookResponse>> searchBooks(
             @RequestParam String search,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
@@ -93,7 +91,7 @@ public class BookController {
         List<Book> fetched = bookService.searchBooks(search, page, pageSize + 1);
         boolean truncated = fetched.size() > pageSize;
         List<Book> pageBooks = fetched.size() > pageSize ? fetched.subList(0, pageSize) : fetched;
-        return org.springframework.http.ResponseEntity.ok()
+        return ResponseEntity.ok()
                 .header("X-Page", String.valueOf(page))
                 .header("X-Page-Size", String.valueOf(pageSize))
                 .header("X-Truncated", String.valueOf(truncated))

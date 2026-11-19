@@ -22,4 +22,11 @@
     <Match>
         <Bug pattern="CT_CONSTRUCTOR_THROW"/>
     </Match>
+    <!-- Test sources intentionally ignore CountDownLatch.await results, write shared
+         capture flags from instance methods, and keep setup locals for readability.
+         These are concurrency fixtures, not production defects; static analysis is
+         scoped to production sources. -->
+    <Match>
+        <Source name="~.*Test\.java"/>
+    </Match>
 </FindBugsFilter>

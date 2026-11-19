@@ -167,8 +167,6 @@ public class OrderService {
             paymentService.refundPayment(payment.getId(), user.getUsername(),
                     "Customer cancelled paid order");
 
-            Order reloaded = orderRepository.findById(orderId)
-                    .orElseThrow(() -> new IllegalArgumentException("Order not found: " + orderId));
             return;
         }
 
@@ -210,32 +208,7 @@ public class OrderService {
     public void updateOrderStatus(Long orderId, OrderStatus targetStatus, String comment) {
         AppUser admin = securityUtils.getCurrentUser();
         Order order = getOrderById(orderId);
-
-        if (targetStatus == OrderStatus.PAID) {
-            Payment payment = order.getPayment();
-            if (payment == null || payment.getPaymentStatus() != PaymentStatus.COMPLETED) {
-                throw new IllegalStateException(
-                        "Cannot mark order as paid without a completed payment");
-            }
-        }
-
-        if (targetStatus == OrderStatus.CANCELLED && order.getStatus() == OrderStatus.PAID) {
-            Payment payment = order.getPayment();
-            if (payment == null || payment.getPaymentStatus() != PaymentStatus.REFUNDED) {
-                throw new IllegalStateException(
-                        "Cannot cancel a paid order unless payment is refunded");
-            }
-        }
-
-        if (targetStatus == OrderStatus.CANCELLED && order.getStatus() == OrderStatus.PAID) {
-            throw new IllegalStateException(
-                    "Cannot cancel a paid order via status update; use cancel/refund endpoint");
-        }
-
-        if (!order.getStatus().canTransitionTo(targetStatus)) {
-            throw new IllegalStateException(
-                    "Cannot transition from " + order.getStatus() + " to " + targetStatus);
-        }
+        validateStatusTransition(order, targetStatus);
 
         OrderStatus previousStatus = order.getStatus();
         order.recordTransition(targetStatus, admin.getUsername(), comment);
@@ -293,6 +266,37 @@ public class OrderService {
                 new OrderStatusChangedEvent(order.getId(), order.getUser().getId(), order.getUser().getUsername(),
                         order.getUser().getEmail(), previousStatus, OrderStatus.CANCELLED),
                 EventTypes.AGGREGATE_ORDER, String.valueOf(order.getId()), EventTypes.ORDER_CANCELLED);
+    }
+
+    private void validateStatusTransition(Order order, OrderStatus targetStatus) {
+        validatePaidTransition(order, targetStatus);
+        validateCancelledTransition(order, targetStatus);
+        if (!order.getStatus().canTransitionTo(targetStatus)) {
+            throw new IllegalStateException(
+                    "Cannot transition from " + order.getStatus() + " to " + targetStatus);
+        }
+    }
+
+    private void validatePaidTransition(Order order, OrderStatus targetStatus) {
+        if (targetStatus != OrderStatus.PAID) {
+            return;
+        }
+        Payment payment = order.getPayment();
+        if (payment == null || payment.getPaymentStatus() != PaymentStatus.COMPLETED) {
+            throw new IllegalStateException("Cannot mark order as paid without a completed payment");
+        }
+    }
+
+    private void validateCancelledTransition(Order order, OrderStatus targetStatus) {
+        if (targetStatus != OrderStatus.CANCELLED || order.getStatus() != OrderStatus.PAID) {
+            return;
+        }
+        Payment payment = order.getPayment();
+        if (payment == null || payment.getPaymentStatus() != PaymentStatus.REFUNDED) {
+            throw new IllegalStateException("Cannot cancel a paid order unless payment is refunded");
+        }
+        throw new IllegalStateException(
+                "Cannot cancel a paid order via status update; use cancel/refund endpoint");
     }
 
     private void releaseInventoryForOrder(Order order, String reason, String changedBy) {
